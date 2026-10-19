@@ -1,0 +1,5 @@
+/* Brush face for the task text written on the origami sheet (drawn into a canvas texture). */
+@import url('https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@800&display=swap');
+/* Tailwind without its preflight reset, so the pack's hand-tuned styles (src/orito/*.css) stay intact. */
+@import 'tailwindcss/theme' layer(theme);
+@import 'tailwindcss/utilities' layer(utilities);

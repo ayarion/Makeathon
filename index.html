@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <!-- figma:head-start -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1c7553" />
+    <title>折りGO — 朝の体験デモ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700;900&display=swap" rel="stylesheet" />
+    <style>
+      /* Title screen: a still frame shown the moment the URL opens, before any script runs. */
+      #title-screen{position:fixed;inset:0;z-index:1000;overflow:hidden;color:#fff;text-align:center;
+        font-family:'Hiragino Maru Gothic ProN','Zen Maru Gothic',-apple-system,BlinkMacSystemFont,sans-serif;
+        background:radial-gradient(120% 80% at 50% 52%,#2f9c70 0%,#1f825c 48%,#155f43 100%);
+        transition:opacity .7s ease}
+      #title-screen.leaving{opacity:0;pointer-events:none}
+      #title-screen .title-copy{position:absolute;left:0;right:0;top:max(10vh,calc(env(safe-area-inset-top) + 40px));margin:0;padding:0 24px}
+      #title-screen .title-logo{display:block;font-size:clamp(56px,16vw,104px);font-weight:900;line-height:1.1;letter-spacing:.06em;text-shadow:0 4px 0 #0f4f37}
+      #title-screen .title-sub{display:block;margin-top:clamp(10px,2vh,18px);font-size:clamp(19px,5.2vw,28px);font-weight:700;letter-spacing:.16em;opacity:.94}
+      #title-screen .title-crane{position:absolute;left:50%;top:52%;width:min(68vw,42vh,380px);translate:-50% -50%}
+      #title-screen .title-crane svg{display:block;width:100%;height:auto;overflow:visible}
+      #title-screen .title-ground{position:absolute;left:50%;top:calc(52% + min(68vw,42vh,380px) * .42);width:min(46vw,28vh,250px);height:18px;translate:-50% 0;border-radius:50%;background:#0b3f2b;opacity:.32;filter:blur(7px)}
+    </style>
+    <!-- figma:head-end -->
+  </head>
+  <body>
+    <!-- figma:body-start -->
+    <div id="title-screen">
+      <h1 class="title-copy"><span class="title-logo">折りGO</span><span class="title-sub">〜ベッドからの脱出〜</span></h1>
+      <div class="title-ground" aria-hidden="true"></div>
+      <div class="title-crane" aria-hidden="true">
+        <svg viewBox="28 30 236 170" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="title-crane-shadow" x="-35%" y="-35%" width="180%" height="180%"><feDropShadow dx="0" dy="6" stdDeviation="4" flood-color="#0b3f2b" flood-opacity=".38" /></filter>
+            <filter id="title-crane-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="3" stitchTiles="stitch" /><feColorMatrix type="saturate" values="0" /><feComponentTransfer><feFuncA type="linear" slope=".12" /></feComponentTransfer><feComposite in2="SourceGraphic" operator="in" result="grain" /><feBlend in="SourceGraphic" in2="grain" mode="multiply" /></filter>
+          </defs>
+          <g filter="url(#title-crane-shadow)"><g filter="url(#title-crane-grain)">
+            <path d="M126 145 43 66 119 94 165 140Z" fill="#eef4ef" />
+            <path d="M126 145 43 66 100 143Z" fill="#c6d7cd" />
+            <path d="M135 145 213 43 194 137 162 165Z" fill="#f6faf5" />
+            <path d="M135 145 213 43 171 146Z" fill="#ffffff" />
+            <path d="M100 143 157 130 192 157 149 187Z" fill="#dce8e0" />
+            <path d="M100 143 149 187 119 165Z" fill="#b9cbc0" />
+            <path d="M157 130 171 146 149 187Z" fill="#e8f0ea" />
+            <path d="M184 156 212 104 237 100 226 114 217 116 202 168 149 187Z" fill="#ffffff" />
+            <path d="M212 104 218 109 202 168 184 156Z" fill="#d3e0d7" />
+            <path d="M237 100 254 111 226 114Z" fill="#F24E1E" />
+            <path d="M101 143 65 157 38 150 81 139Z" fill="#e2ebe5" />
+            <path d="M149 187 157 130M126 145 43 66M171 146 213 43M212 104 202 168" fill="none" stroke="#1d5a41" stroke-width="1.2" opacity=".2" />
+          </g></g>
+        </svg>
+      </div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <!-- figma:body-end -->
+  </body>
+</html>
