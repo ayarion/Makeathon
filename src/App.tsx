@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import shell from './orito/shell.html?raw'
 import './orito/styles.css'
 import './orito/onboarding.css'
+import './orito/refresh.css'
 
 /**
  * 折りGO runs as the dependency-free web app from the handoff pack (src/orito/*.js).

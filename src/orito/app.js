@@ -2,6 +2,7 @@ import { initialState, loadState, saveState, createTask, addCapture, nextAlarm, 
 import { MorningExperience } from './ar-engine.js';
 import { showOnboarding, closeStory, showPaperOpening, showPcNotice } from './onboarding.js';
 import { portrait, playNightFold } from './origami3d.ts';
+import { startGuidedTutorial } from './tutorial.js';
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const paths = {
@@ -20,26 +21,67 @@ const paths = {
 function icon(name) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]||paths.paper}"/></svg>`; }
 function hydrateIcons(root=document) { root.querySelectorAll('[data-icon]').forEach(e=>e.innerHTML=icon(e.dataset.icon)); }
 function escape(text) { const d=document.createElement('div');d.textContent=text;return d.innerHTML; }
-const colors={peach:'#FF7262',blue:'#1ABCFE',sage:'#0ACF83',orange:'#F24E1E',purple:'#A259FF'};
+const colors={peach:'#DB8F85',blue:'#86ABC5',sage:'#92B380',orange:'#D19A60',purple:'#B18DBF'};
 let state, storageProblem=false;
 try { state=loadState(); } catch(e) { state=initialState();storageProblem=true; }
 let editing=null, page='write', experience=null, session=null, toastTimer, savedTimer, busy=false, nativeActive=false, alarmAudio=null;
 let introActive=false,introGeneration=0;
+let tutorialFoldPending=false;
 const native = !!window.webkit?.messageHandlers?.origamiAR;
 hydrateIcons();
+// Keep one form and one draft; only its presentation moves into the focused editor.
+const editor = $('#note-dialog');
+const alarmSurface = $('#alarm-dialog');
+const writingSide = $('.writing-side');
+$('#note-mount').append(writingSide);
+$('.write-layout').innerHTML=`<div class="home-note-lift"><button type="button" id="open-note" class="home-note" aria-label="明日やることをメモ帳で書く"><span class="home-note-top"><span>明日やること</span>${icon('pencil')}</span><span id="note-preview">例：ゴミだし</span><span class="paper-fold" aria-hidden="true"></span></button></div>`;
+// Keep the palette on home while associating its radios with the editor's form.
+const homePalette = $('.paper-colors');
+homePalette.querySelectorAll('input').forEach(input => input.setAttribute('form', 'task-form'));
+$('.write-layout').append(homePalette);
+alarmSurface.append($('#page-alarm'));
+function updateNotePreview(){ $('#note-preview').textContent=$('#task-text').value.trim()||'例：ゴミだし'; }
+function openNote({focus=true}={}){if(!editor.open)editor.showModal();if(focus)$('#task-text').focus({preventScroll:true});window.dispatchEvent(new Event('origo:note-open'));}
+function closeNote(){if(busy)return;editor.close();updateNotePreview();$('#open-note').focus({preventScroll:true});window.dispatchEvent(new Event('origo:note-close'));}
+$('#open-note').onclick=()=>openNote();
+$('.note-close').onclick=closeNote;
+editor.addEventListener('cancel',event=>{event.preventDefault();closeNote();});
+for(const surface of [editor,alarmSurface])surface.addEventListener('click',event=>{if(event.target!==surface)return;const r=surface.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom){if(surface===editor)closeNote();else go('write');}});
+alarmSurface.addEventListener('cancel',event=>{event.preventDefault();go('write');});
+for(const input of $$('input[name="color"]')){input.closest('.color-choice').style.setProperty('--swatch',colors[input.value]);}
+$('.paper-sheet').style.background=colors.peach;
+$('#open-note').style.setProperty('--note-color',colors.peach);
 function toast(text,error=false) { clearTimeout(toastTimer);$('#toast').textContent=text;$('#toast').classList.toggle('error',error);$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,4500); }
 function commit(next) { if(storageProblem) {toast('データを読み込めなかったよ。再読み込みしてね',true);return false;} try { saveState(next);state=next;return true;} catch(e) {toast('保存できなかったよ。もう一度ためしてね',true);return false;} }
-function go(next,{focus=true}={}) { page=next; for(const el of $$('.page')) {el.hidden=el.id!==`page-${next}`;el.classList.toggle('active',!el.hidden);}for(const el of $$('.nav-item')){el.classList.toggle('active',el.dataset.page===next);if(el.dataset.page===next)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');}$('#page-eyebrow').textContent={write:'夜のしたく',alarm:'朝の待ち合わせ',collection:'どうぶつの記録'}[next];history.replaceState(null,'',`#${next}`);window.scrollTo({top:0,behavior:'instant'});if(focus)$('#main').focus({preventScroll:true}); }
+function go(next,{focus=true}={}) {
+ page=next;
+ if(next!=='write'&&editor.open)editor.close();
+ if(next!=='alarm'&&alarmSurface.open)alarmSurface.close();
+ const overlay=['alarm','collection'].includes(next);
+ document.body.dataset.page=next;
+ for(const el of $$('.page')) {el.hidden=el.id!==`page-${next}`&&!(overlay&&el.id==='page-write');el.classList.toggle('active',el.id===`page-${next}`);}
+ for(const el of $$('.nav-item')){el.classList.toggle('active',el.dataset.page===next);if(el.dataset.page===next)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');}
+ $('#page-write').inert=overlay;
+ if(next==='alarm'&&!alarmSurface.open)alarmSurface.showModal();
+ history.replaceState(null,'',`#${next}`);
+ window.scrollTo({top:0,behavior:'instant'});
+ if(focus)(overlay?$(`#page-${next} .page-back`):$('#main')).focus({preventScroll:true});
+ window.dispatchEvent(new CustomEvent('origo:route',{detail:next}));
+}
 $$('.nav-item').forEach(el=>el.addEventListener('click',()=>go(el.dataset.page)));
+$$('.page-back').forEach(el=>el.onclick=()=>go('write'));
+$('#topbar-alarm').onclick=()=>go('alarm');
 $('.brand').addEventListener('click',e=>{e.preventDefault();go('write');});
 function renderTasks() {
- const past=[...state.captures].reverse();
+ const past=[...state.tasks].reverse();
  $('#task-count').textContent=`${past.length} まい`;
- if(!past.length){$('#task-list').innerHTML=`<div class="task-empty">${icon('paper')}<span>朝に捕まえた折り紙が、ここに並ぶよ。</span></div>`;return;}
- $('#task-list').innerHTML=`<div class="task-grid">${past.map(c=>`<button class="task-card past-card" data-past="${c.id}" style="--task-color:${colors[c.color]||colors.peach}" aria-label="${escape(c.text)}の折り紙を開く"><img class="task-animal" src="${portrait(c.animal,c.color)}" alt="${ANIMAL_NAMES[c.animal]}"><span class="task-copy">${escape(c.text)}<small>${new Intl.DateTimeFormat('ja-JP',{month:'long',day:'numeric'}).format(new Date(c.capturedAt))}</small></span></button>`).join('')}</div>`;
- $('#task-list').querySelectorAll('[data-past]').forEach(b=>b.onclick=()=>showCapture(state.captures.find(c=>c.id===b.dataset.past)));
+ const card=t=>`<button class="task-card past-card" data-task="${t.id}" style="--task-color:${colors[t.color]||colors.peach}"><img class="task-animal" src="${portrait(t.animal,t.color)}" alt="${ANIMAL_NAMES[t.animal]}"><span class="task-copy">${escape(t.text)}<small>${new Intl.DateTimeFormat('ja-JP',{month:'long',day:'numeric'}).format(new Date(t.createdAt))}</small></span>${icon('arrow')}</button>`;
+ $('#task-list').innerHTML=past.length?card(past[0]):`<div class="task-empty">${icon('paper')}<span>最初の1枚を、折ってみよう。</span></div>`;
+ $('#task-list').querySelector('button')?.addEventListener('click',()=>go('tasks'));
+ $('#archive-list').innerHTML=past.length?past.map(card).join(''):'<p>まだ折り紙がありません。</p>';
+ $('#archive-list').querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>{const t=state.tasks.find(t=>t.id===b.dataset.task);openDialog('タスク折り紙',`<img class="dialog-animal" src="${portrait(t.animal,t.color)}" alt="${ANIMAL_NAMES[t.animal]}"><div class="unfolded-task">${escape(t.text)}</div>`);});
 }
-function renderAlarm() { $('#enable-alarm-sound').hidden=!state.alarm.enabled||alarmAudio?.state==='running'; $('#alarm-time').value=state.alarm.time;$('#volume').value=Math.max(.35,state.alarm.volume);$('#alarm-toggle').setAttribute('aria-checked',String(state.alarm.enabled));$('#alarm-toggle').setAttribute('aria-label',state.alarm.enabled?'アラームをオフにする':'アラームを有効にする');$('#alarm-status').textContent=state.alarm.enabled?`次は ${new Intl.DateTimeFormat('ja-JP',{month:'numeric',day:'numeric'}).format(nextAlarm(state.alarm.time))} ${state.alarm.time}`:'アラームはおやすみ中'; }
+function renderAlarm() { $('#ta-time').textContent=state.alarm.time;$('#ta-label').textContent=state.alarm.enabled?'アラーム ON':'アラーム OFF';$('#topbar-alarm').classList.toggle('is-off',!state.alarm.enabled); $('#alarm-time').value=state.alarm.time;$('#volume').value=Math.max(.35,state.alarm.volume);$('#alarm-toggle').setAttribute('aria-checked',String(state.alarm.enabled));$('#alarm-toggle').setAttribute('aria-label',state.alarm.enabled?'アラームをオフにする':'アラームを有効にする');$('#alarm-status').textContent=state.alarm.enabled?`次は ${new Intl.DateTimeFormat('ja-JP',{month:'numeric',day:'numeric'}).format(nextAlarm(state.alarm.time))} ${state.alarm.time}`:''; }
 const SAMPLE_CAPTURES=[{id:'sample-fox',animal:'fox',color:'sage',text:'キツネ(見本)',capturedAt:'2026-01-01T07:00:00.000Z',sample:true},{id:'sample-rabbit',animal:'rabbit',color:'purple',text:'ウサギ(見本)',capturedAt:'2026-01-01T07:00:00.000Z',sample:true}];
 function renderCollection(){ const have=new Set(state.captures.map(c=>c.animal));const samples=SAMPLE_CAPTURES.filter(c=>!have.has(c.animal));const all=[...[...state.captures].reverse(),...samples];$('#collection-count').textContent=`${state.captures.length} 匹`;
  $('#collection-list').innerHTML=all.map(c=>`<button class="animal-card${c.sample?' is-sample':''}" data-capture="${c.id}" aria-label="${ANIMAL_NAMES[c.animal]}の折り紙を開く"><img src="${portrait(c.animal,c.color)}" alt=""><h2>${ANIMAL_NAMES[c.animal]}</h2><p>${c.sample?'見本・まだ出会っていないよ':new Intl.DateTimeFormat('ja-JP',{month:'long',day:'numeric'}).format(new Date(c.capturedAt))+' の朝'}</p></button>`).join('');$('#collection-list').querySelectorAll('[data-capture]').forEach(b=>b.onclick=()=>showCapture(all.find(c=>c.id===b.dataset.capture))); }
@@ -47,22 +89,21 @@ function renderAll(){renderTasks();renderAlarm();renderCollection();}
 function openDialog(title,body,actions=[]){const d=$('#dialog');$('#dialog-content').innerHTML=`<div class="dialog-top"><h2>${title}</h2><button class="icon-button" id="dialog-close" aria-label="閉じる">${icon('close')}</button></div><div class="dialog-body">${body}</div><div class="dialog-actions">${actions.map((a,i)=>`<button class="button ${a.kind||'secondary'} full" id="dialog-action-${i}">${a.icon?icon(a.icon):''}${a.label}</button>`).join('')}</div>`;$('#dialog-close').onclick=()=>d.close();actions.forEach((a,i)=>{$(`#dialog-action-${i}`).onclick=async()=>{const b=$(`#dialog-action-${i}`);b.disabled=true;try{await a.run();}catch(e){toast(e.message||'もう一度ためしてね',true);}finally{if(b.isConnected)b.disabled=false;}}});if(!d.open)d.showModal();}
 function closeDialog(){ $('#dialog').close(); }
 $('#dialog').addEventListener('click',e=>{if(e.target===$('#dialog')){const r=$('#dialog').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeDialog();}});
-function cancelEdit(){editing=null;$('#task-form').reset();$('#form-title').textContent='やること';$('#save-task').innerHTML=`${icon('fold')}<span>折り紙にする</span><span data-icon="arrow">${icon('arrow')}</span>`;$('#cancel-edit').hidden=true;$('#form-error').textContent='';$('.paper-sheet').style.background=colors.peach;}
+function cancelEdit(){editing=null;$('#task-form').reset();$('#form-title').textContent='やること';$('#save-task').innerHTML=`${icon('fold')}<span>折り紙にする</span><span data-icon="arrow">${icon('arrow')}</span>`;$('#cancel-edit').hidden=true;$('#form-error').textContent='';$('.paper-sheet').style.background=colors.peach;$('#open-note').style.setProperty('--note-color',colors.peach);}
 $('#cancel-edit').onclick=cancelEdit;
-$$('input[name="color"]').forEach(el=>el.onchange=()=>{$('.paper-sheet').style.background=colors[el.value];});
-$('#task-text').addEventListener('input',()=>$('#form-error').textContent='');
-$('#task-form').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;let task;try{task=createTask($('#task-text').value,$('input[name="color"]:checked').value,state.tasks.length);}catch(e){$('#form-error').textContent=e.message;$('#task-text').focus();return;}busy=true;$('#save-task').disabled=true;const isEdit=!!editing;const next={...state,tasks:editing?state.tasks.map(t=>t.id===editing?{...t,text:task.text,color:task.color,updatedAt:task.updatedAt}:t):[...state.tasks,task]};if(commit(next)){const actual=editing?next.tasks.find(t=>t.id===editing):task;if(!playNightFold($('.paper-sheet'),{kind:actual.animal,paper:actual.color,text:actual.text}))$('#task-form').classList.add('form-folding');renderAll();$('#saved-feedback').innerHTML=`<img src="${portrait(actual.animal,actual.color)}" alt="">${isEdit?'書きなおして、保存したよ':'保存したよ。朝に会おうね。'}`;await new Promise(r=>setTimeout(r,550));$('#task-form').classList.remove('form-folding');cancelEdit();clearTimeout(savedTimer);savedTimer=setTimeout(()=>$('#saved-feedback').textContent='',9000);}else{$('#form-error').textContent='保存できなかったよ。文章はそのまま、もう一度。';}busy=false;$('#save-task').disabled=false;});
-function unlockAudio(){try{if(!alarmAudio){alarmAudio=new(window.AudioContext||window.webkitAudioContext)();}alarmAudio.resume().then(()=>{ $('#enable-alarm-sound').hidden=true; }).catch(()=>{ $('#enable-alarm-sound').hidden=!state.alarm.enabled; });}catch{toast('音を準備できなかったよ。もう一度ためしてね',true);}}
-$('#enable-alarm-sound').onclick=()=>{unlockAudio();};
-$('#alarm-toggle').onclick=()=>{unlockAudio();const enabled=!state.alarm.enabled;if(commit({...state,alarm:{...state.alarm,enabled,nextAt:enabled?nextAlarm(state.alarm.time).toISOString():null}})){renderAlarm();toast(enabled?'アラームをセットしたよ':'アラームをオフにしたよ');}};
-$('#alarm-time').onchange=()=>{const time=$('#alarm-time').value;if(!/^\d{2}:\d{2}$/.test(time)){renderAlarm();return;}if(commit({...state,alarm:{...state.alarm,time,nextAt:nextAlarm(time).toISOString()}})){renderAlarm();toast('起きるじかんを保存したよ');}else renderAlarm();};
+$$('input[name="color"]').forEach(el=>el.onchange=()=>{$('.paper-sheet').style.background=colors[el.value];$('#open-note').style.setProperty('--note-color',colors[el.value]);});
+$('#task-text').addEventListener('input',()=>{$('#form-error').textContent='';updateNotePreview();});
+$('#task-form').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;let task;try{task=createTask($('#task-text').value,$('input[name="color"]:checked').value,state.tasks.length);if(tutorialFoldPending&&!editing)task.animal='crane';}catch(e){$('#form-error').textContent=e.message;$('#task-text').focus();return;}busy=true;$('#save-task').disabled=true;const isEdit=!!editing;const next={...state,tasks:editing?state.tasks.map(t=>t.id===editing?{...t,text:task.text,color:task.color,updatedAt:task.updatedAt}:t):[...state.tasks,task]};if(commit(next)){tutorialFoldPending=false;const actual=editing?next.tasks.find(t=>t.id===editing):task;if(!playNightFold($('.paper-sheet'),{kind:actual.animal,paper:actual.color,text:actual.text}))$('#task-form').classList.add('form-folding');window.dispatchEvent(new Event('origo:task-folding'));renderTasks();$('#saved-feedback').innerHTML=`<img src="${portrait(actual.animal,actual.color)}" alt="">${isEdit?'書きなおして、保存したよ':'保存したよ。朝に会おうね。'}`;await waitForNightFold();$('#task-form').classList.remove('form-folding');cancelEdit();updateNotePreview();clearTimeout(savedTimer);savedTimer=setTimeout(()=>$('#saved-feedback').textContent='',9000);}else{$('#form-error').textContent='保存できなかったよ。文章はそのまま、もう一度。';}busy=false;$('#save-task').disabled=false;if(!$('#form-error').textContent){editor.close();$('#open-note').focus({preventScroll:true});window.dispatchEvent(new Event('origo:task-folded'));}});
+function waitForNightFold(){return new Promise(resolve=>{const sheet=$('.paper-sheet');if(!sheet.classList.contains('is-origami-folding')){setTimeout(resolve,matchMedia('(prefers-reduced-motion: reduce)').matches?0:550);return;}const observer=new MutationObserver(()=>{if(!sheet.classList.contains('is-origami-folding')){observer.disconnect();clearTimeout(timeout);resolve();}});const timeout=setTimeout(()=>{observer.disconnect();resolve();},12000);observer.observe(sheet,{attributes:true,attributeFilter:['class']});});}
+function unlockAudio(){try{if(!alarmAudio){alarmAudio=new(window.AudioContext||window.webkitAudioContext)();}alarmAudio.resume().catch(()=>toast('音を準備できなかったよ。もう一度ためしてね',true));}catch{toast('音を準備できなかったよ。もう一度ためしてね',true);}}
+$('#alarm-toggle').onclick=()=>{unlockAudio();const enabled=!state.alarm.enabled;if(commit({...state,alarm:{...state.alarm,enabled,nextAt:enabled?nextAlarm(state.alarm.time).toISOString():null}})){renderAlarm();window.dispatchEvent(new Event('origo:alarm-change'));}};
+$('#alarm-time').onchange=()=>{const time=$('#alarm-time').value;if(!/^\d{2}:\d{2}$/.test(time)){renderAlarm();return;}if(commit({...state,alarm:{...state.alarm,time,nextAt:nextAlarm(time).toISOString()}})){renderAlarm();toast('起きるじかんを保存したよ');window.dispatchEvent(new Event('origo:alarm-change'));}else renderAlarm();};
 $('#volume').onchange=()=>{if(commit({...state,alarm:{...state.alarm,volume:Math.max(.35,Number($('#volume').value))}}))toast('音量を保存したよ');else renderAlarm();};
 $('#reset-experience').onclick=async()=>{await endExperience();startOnboarding();};
-function sessionTasks(){const captured=new Set(state.captures.map(c=>c.taskId));return state.tasks.filter(t=>!t.done&&!captured.has(t.id));}
-async function morningGate(){unlockAudio();const tasks=sessionTasks();if(!tasks.length){openDialog('あしたの1枚を用意しよう',`<p>やることを書いた折り紙が、朝のどうぶつになるよ。</p>`,[{label:'やることを書く',icon:'pencil',kind:'primary',run:()=>{closeDialog();go('write');$('#task-text').focus();}},{label:'おためしの折り紙を用意',kind:'primary',run:()=>{let list=['窓を開けて、朝の空気を吸う','コップ1杯の水を飲む','ゴミだし'].map((t,i)=>createTask(t,['peach','blue','sage'][i],state.tasks.length+i));if(commit({...state,tasks:[...state.tasks,...list]})){renderAll();morningGate();}}}]);return;}
- if(native){openDialog('朝のどうぶつを迎えに',`<img class="dialog-animal" src="${portrait(tasks[0].animal,tasks[0].color)}" alt=""><p>足元を片づけて、ゆっくり歩いてね。</p>`,[{label:'迎えにいく',icon:'camera',kind:'primary',run:()=>launch('native')},{label:'画面でためす',kind:'primary',run:()=>launch('demo')}]);return;}
- let ar=false;try{ar=!!navigator.xr&&await navigator.xr.isSessionSupported('immersive-ar');}catch{}
- openDialog(ar?'朝のどうぶつを迎えに':'朝を、ひと足先に。',`<img class="dialog-animal" src="${portrait(tasks[0].animal,tasks[0].color)}" alt=""><p>${ar?'足元を片づけて、ゆっくり歩いてね。':'画面の中で、捕まえるまでをおためし。歩いて追う体験はiPhoneアプリで。'}</p>`,[...(ar?[{label:'ARで迎えにいく',icon:'camera',kind:'primary',run:()=>launch('ar')}]:[]),{label:'カメラでためす',icon:'camera',kind:ar?'secondary':'primary',run:()=>launch('camera')},{label:'カメラなしでためす',kind:'primary',icon:'play',run:()=>launch('demo')}]);
+function sessionTasks(){return state.tasks.filter(t=>!t.done);}
+async function morningGate(){
+ if(!native && isDesktop()){showPcNotice();return;}
+ startOnboarding();
 }
 $('#start-morning').onclick=morningGate;
 async function launch(mode,{onboarding=false}={}) {
@@ -78,12 +119,12 @@ async function launch(mode,{onboarding=false}={}) {
   window.webkit.messageHandlers.origamiAR.postMessage({action:'start',multiple,count:session.ids.length,animals:session.animals,animal:session.animal,volume:Math.max(.35,state.alarm.volume),muted:false});return;
  }
  experience=new MorningExperience({mount:$('#experience-mount'),onState:s=>{if(s.ended)interruptExperience();},onCapture:()=>finishCapture(),onError:e=>{console.warn('Experience:',e);}});
- try{await experience.start({chaseSeconds:mode==='demo'?6:onboarding?8:30,mode,multiple,count:session.ids.length,animals:session.animals,colors:session.colors,animal:session.animal,volume:Math.max(.35,state.alarm.volume),muted:mode==='demo',audioContext:alarmAudio});}
- catch(e){await endExperience();if(mode==='camera'&&isDesktop()){showPcNotice({reason:'PCではカメラを開けませんでした。',onContinue:()=>launch('demo',{onboarding})});return;}openDialog('カメラを開けなかったよ',`<p>${escape(e.message||'カメラの接続を確認して、もう一度ためしてね。')}</p>`,[{label:'もう一度ためす',kind:'primary',run:()=>launch(mode,{onboarding})},{label:'カメラなしでためす',kind:'primary',run:()=>launch('demo',{onboarding})}]);}
+ try{await experience.start({chaseSeconds:onboarding?8:30,mode,multiple,count:session.ids.length,animals:session.animals,colors:session.colors,animal:session.animal,volume:Math.max(.35,state.alarm.volume),muted:false,audioContext:alarmAudio});const exit=document.createElement('button');exit.className='experience-exit';exit.textContent='体験をやめる';exit.onclick=()=>endExperience();$('#experience-mount').append(exit);}
+ catch(e){await endExperience();if(mode==='camera'&&isDesktop()){showPcNotice();return;}openDialog('カメラを開けなかったよ',`<p>${escape(e.message||'カメラの接続を確認して、もう一度ためしてね。')}</p>`,[{label:'もう一度ためす',kind:'primary',run:()=>launch(mode,{onboarding})}]);}
 }
 async function endExperience(){session=null;if(nativeActive){nativeActive=false;window.webkit.messageHandlers.origamiAR.postMessage({action:'stop'});}if(experience){const old=experience;experience=null;await old.stop();}$('#experience-dialog').close();$('#experience-mount').innerHTML='';stopRinging();}
 function interruptExperience(){return experience?.phase==='capturing'?finishCapture():endExperience();}
-$('#experience-dialog').addEventListener('cancel',event=>event.preventDefault());
+$('#experience-dialog').addEventListener('cancel',event=>{event.preventDefault();void endExperience();});
 window.addEventListener('origami-ar',async e=>{const d=e.detail||{};if(!nativeActive)return;if(d.type==='capture')finishCapture();else if(d.type==='closed'){nativeActive=false;endExperience();}else if(d.type==='error'){const onboarding=!!session?.onboarding;nativeActive=false;await endExperience();openDialog('カメラをもう一度',`<p>${escape(d.message||'設定からカメラを許可してね')}</p>`,[{label:'もう一度ためす',kind:'primary',run:()=>launch('native',{onboarding})},{label:'もどる',run:closeDialog}]);}});
 async function finishCapture(){
  if(!session)return;
@@ -107,13 +148,14 @@ function showCapture(c,fresh=false){
 }
 function startOnboarding({fromTitle=false}={}){
  if(storageProblem)return;
+ if(!native && isDesktop()){showPcNotice();return;}
  introActive=true;introGeneration++;
- showOnboarding({fromTitle,animal:'crane',isNative:native,color:sessionTasks()[0]?.color??'blue',onInteract:ensureIntroSound,onStart:async()=>{
+ showOnboarding({fromTitle,animal:'crane',isNative:native,color:sessionTasks()[0]?.color??'blue',onInteract:ensureIntroSound,onExit:()=>{introActive=false;introGeneration++;stopRinging();go('alarm');},onStart:async()=>{
   ensureIntroSound();
   const request=++introGeneration;
   if(!sessionTasks().length){const sample={...createTask('窓を開けて、朝の空気を吸う','blue',1),sample:true};if(!commit({...state,tasks:[...state.tasks,sample]}))return;renderAll();}
-  let mode=native?'native':'demo';
-  if(!native&&!isDesktop()&&window.isSecureContext&&navigator.mediaDevices?.getUserMedia)mode='camera';
+  let mode=native?'native':'camera';
+  if(!native&&window.isSecureContext&&navigator.mediaDevices?.getUserMedia)mode='camera';
   if(!native&&navigator.xr){try{if(await navigator.xr.isSessionSupported('immersive-ar'))mode='ar';}catch{}}
   if(introActive&&request===introGeneration&&!document.hidden)await launch(mode,{onboarding:true});
  }});
@@ -165,21 +207,35 @@ window.addEventListener('pagehide',()=>{introActive=false;introGeneration++;clos
 renderAll();go(['write','alarm','collection'].includes(location.hash.slice(1))?location.hash.slice(1):'write',{focus:false});
 if(storageProblem)openDialog('保存したデータを読み込めなかったよ',`<p>データを残したままにしてあるよ。再読み込みして、もう一度ためしてね。</p>`,[{label:'再読み込み',kind:'primary',run:()=>location.reload()}]);
 
-// The still title screen (index.html) holds for a moment, then reveals the app.
+// The supplied title owns its animation; wait for the completed logo before fading.
 const titleScreen=document.getElementById('title-screen');
+let titleLeft=false;
 function leaveTitle(){
- document.querySelector('meta[name="theme-color"]')?.setAttribute('content','#f0f6ed');
+ if(titleLeft)return;titleLeft=true;
+ document.querySelector('meta[name="theme-color"]')?.setAttribute('content','#faead8');
  titleScreen?.classList.add('leaving');
- beginFirstRun();
- setTimeout(()=>titleScreen?.remove(),900);
+ setTimeout(()=>{document.getElementById('title-animation')?.contentWindow?.OrigoTitle?.stop();titleScreen?.remove();beginFirstRun();},matchMedia('(prefers-reduced-motion: reduce)').matches?0:600);
 }
-if(titleScreen)setTimeout(leaveTitle,Math.max(0,1800-performance.now()));
-
-function isDesktop(){return matchMedia('(min-width:851px) and (hover:hover) and (pointer:fine)').matches&&!navigator.maxTouchPoints;}
+const titleFrame=document.getElementById('title-animation');
+function connectTitle(){const w=titleFrame?.contentWindow;if(!w)return;w.addEventListener('origo:done',()=>setTimeout(leaveTitle,450),{once:true});if(w.OrigoTitle)w.OrigoTitle.onDone=()=>setTimeout(leaveTitle,450);if(w.OrigoTitle&&matchMedia('(prefers-reduced-motion: reduce)').matches)leaveTitle();}
+connectTitle();titleFrame?.addEventListener('load',connectTitle);
+if(titleScreen)setTimeout(leaveTitle,6500);else beginFirstRun();
+function isDesktop(){return !(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));}
 function beginFirstRun(){
- if(storageProblem||native)return;
- let done=false;try{done=localStorage.getItem(ONBOARDED_KEY)==='1';}catch{}
- const intro=()=>{if(!done)startOnboarding({fromTitle:true});};
- // Local demo opens on the writing screen; the story remains available in demo settings.
- if(new URLSearchParams(location.search).get('intro')==='1')intro();
+ if(storageProblem)return;
+ if(new URLSearchParams(location.search).get('experience')==='1'){go('alarm');morningGate();return;}
+ let done=false;try{done=localStorage.getItem('origo.tutorial.v2')==='1';}catch{}
+ if(!done || new URLSearchParams(location.search).get('tutorial')==='1')startTutorial();
 }
+function startTutorial(){tutorialFoldPending=true;go('write');startGuidedTutorial();}
+// Complete the press feedback before dispatching the action (also for keyboard clicks).
+document.addEventListener('click',event=>{
+ const button=event.target.closest('button');
+ if(!button||button.disabled||button.dataset.animated==='1'||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+ event.preventDefault();event.stopImmediatePropagation();
+ if(button.dataset.animating)return;
+ button.dataset.animating='1';
+ const major=button.matches('.primary,.intro-primary,.opening-done');
+ const animation=button.animate(major?[{scale:1},{scale:.94,offset:.3},{scale:1.05,offset:.7},{scale:1}]:[{scale:1},{scale:.95},{scale:1}],{duration:major?420:180,easing:'ease-in-out'});
+ animation.finished.finally(()=>{delete button.dataset.animating;if(!button.isConnected)return;button.dataset.animated='1';button.click();delete button.dataset.animated;});
+},true);

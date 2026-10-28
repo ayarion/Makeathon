@@ -74,7 +74,3 @@ html:has(dialog[open]),body:has(dialog[open]){overflow:hidden}
 .orbit-two{display:none}
 .intro-crane{z-index:-1}
 .intro-primary{background:#d4262b!important;color:#fff!important;box-shadow:0 2px 0 #9a1a1e,0 6px 14px #9a1a1e33!important}
-
-/* One primary action after opening; keep longer task text readable. */
-.opening-collection{background:transparent;color:#27533f;box-shadow:none;border:1px solid #9eaf9c}
-.revealed-note p{text-wrap:pretty;overflow-wrap:anywhere}

@@ -18,28 +18,28 @@ function mount(content, label) {
 export function closeStory() { cleanUp(); cleanUp = () => {}; dialog.classList.remove('from-title'); dialog.close(); }
 const KATAKANA = { crane: 'ツル', rabbit: 'ウサギ', fox: 'キツネ' };
 
-export function showPcNotice({ onContinue, reason = '' }) {
-  mount(`<section class="pc-notice">
-    <div class="pc-card">
-      <svg class="pc-phone" viewBox="0 0 64 96" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="4" width="48" height="88" rx="9"/><path d="M26 12h12"/><path d="m32 34 14 7-14 22-14-22Z" fill="#F24E1E" stroke="none"/><circle cx="32" cy="80" r="2.5" fill="currentColor"/></svg>
-      <span class="intro-brand">折りGO</span>
-      <h1>スマホで開いてね！</h1>
-      <p>${safe(reason)}折りGOは、スマホで部屋を歩いて遊ぶアプリです。PCをご利用の方は、スマホでこのページを開いてください。</p>
-      <code class="pc-url">${safe(location.origin + location.pathname)}</code>
-      <button type="button" class="pc-continue">このままPCで見る</button>
-    </div>
-  </section>`, 'スマホでご利用ください');
-  const cancel = event => event.preventDefault();
+export function showPcNotice() {
+  const url = 'https://manual-trend-29876845.figma.site/?experience=1#alarm';
+  mount(`<section class="pc-notice"><div class="pc-card">
+    <button type="button" class="pc-close" aria-label="QRコードを閉じる">×</button>
+    <h1>スマホでアラームを体験</h1>
+    <p>スマホのカメラで読み取ってね。</p>
+    <img class="pc-qr" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZoAAAGaAQAAAAAefbjOAAADJUlEQVR4nO1cbY6jMAx1AKk/QeoBepTsDfZIe6begBxlDlAJflZK5ZU/Ap2VVlq21XRo3vuRoQWrYKzn58SZwLQZqdluQwQjBxzhgCMccIQDjnDAEQ44Yk+OCI6OiOaOQhhELgy3YAPN5YIfL7m9jYDRI47o7E8cZZyPRNRfNQSI4kQcqG9Fe7ZZLwsP/FIDo105YnYCMHqg3iLA4CeUQV50e5sAoydwxIo4Emvq4CSMEM9dZprvLoDLK4uIFNpM6WfuKPKtY6Jr4J09UwOjJ0REL69dqCCOIiWpE83Qsg3xTEIcC+Dy93dE0kpCJcR8YIpTK4MEiAxENys1XnV72wCjxzmC778SjtCCQ5BOuTDICrj8jR1BLCCngpZ5JCs3bWDmvBCFfmTm8Zs/UwOjxyOC+ixHXnP6m+dMPOqJichCJSIiauEIlrevzCBTEfqRJ6cMHnunEXBELRHBlhyMFOSTikolj5Ir7GpwRC0RMeqLV7mwcIR/VzjCEwt0RD0cwYuOsOrTj+QSCwsNFUREJWufg65cHIwUtAS1ozToIBfJzPa4n2faCBj9mTUEkheUCkjFxJI67Cyqz+pqDTZ60CJT88eqIzxhIGtUFBHscXAXDOv0BOYj6puholVKOkd4rVHmrzAfUVutwYUjpvVE/qQtVtHxzZ+pgdFzdASt2vFuZtvmqlxtQkdUFHutCMirtNrq4vjSg3sSjpilLP1AV91eX+5/rn2yCsiVFERRlOrTVQayRkU9VLnTNoigR2m4ENOsnRKXwDbMx7yPZ2pg9CQdEYuoXHuxfa1D4LUplGUtPVSt5AXhCG+p0qnsLsRzm4Ps5gg0H6Xt8mtvr4HRq/d0sVeaupPrwJROuqFHA+cWsK5R1Zwl6yy2zV4uR4qlUwJZo64+y1jWwEtDXYkSA/oj6jSKygfzgcOvD0kkmjW0Y6bs99vfM/0LYPS3PV2kRWZ/DZxOTCIqZQdPWNSmAN6raE8Xy6AlRdBMkoZLx2los+zuwnxETWufitIa4YrC+yP0lPfpYz7i3Y0C/jPZLt5TAyMDHOGAIxxwhAOOcMARjq9zxG/uMIZmaKj0ewAAAABJRU5ErkJggg==" width="232" height="232" alt="スマホでアラーム体験を開くQRコード">
+    <a class="pc-url" href="${url}" target="_blank" rel="noopener">スマホ用のリンクを開く</a>
+    <button type="button" class="pc-continue">アラーム設定に戻る</button>
+  </div></section>`, 'スマホでアラームを体験');
+  const cancel = event => { event.preventDefault(); closeStory(); };
   dialog.addEventListener('cancel', cancel);
   cleanUp = () => dialog.removeEventListener('cancel', cancel);
-  dialog.querySelector('.pc-continue').onclick = () => { closeStory(); onContinue(); };
+  dialog.querySelector('.pc-close').onclick = closeStory;
+  dialog.querySelector('.pc-continue').onclick = closeStory;
 }
 
-export function showOnboarding({ onStart, onInteract, isNative, color, animal = 'crane', fromTitle = false }) {
+export function showOnboarding({ onStart, onInteract, onExit, isNative, color, animal = 'crane', fromTitle = false }) {
   const name = KATAKANA[animal] || 'ツル';
   mount(`<section class="alarm-story">
     <div class="story-scene" aria-hidden="true"><img class="intro-landscape" src="assets/landscape-morning.svg" alt=""><div class="alarm-orbit orbit-one"></div><div class="alarm-orbit orbit-two"></div><div class="intro-crane"><img src="assets/animal-crane.svg" alt=""></div><span class="paper-spark spark-one">✧</span><span class="paper-spark spark-two">✧</span></div>
-    <header class="intro-top"><span class="intro-brand">折りGO</span></header>
+    <header class="intro-top"><span class="intro-brand">折りGO</span><button type="button" class="story-close" aria-label="体験をやめる">×</button></header>
     <div class="intro-copy"><div class="alarm-stamp"><span class="alarm-dot"></span>緊急！</div><h1>${name}が現れました</h1><p>つかまえてアラームを止めよう</p></div>
     <footer class="intro-actions"><button type="button" class="intro-primary">つかまえる <span aria-hidden="true">→</span></button>${isNative ? '' : '<span class="intro-mode">ブラウザで体験</span>'}</footer>
   </section>`, `緊急！${name}が現れました。つかまえてアラームを止めよう`);
@@ -54,7 +54,9 @@ export function showOnboarding({ onStart, onInteract, isNative, color, animal = 
     start.disabled = true;
     try { await onStart(); } finally { if (start.isConnected) start.disabled = false; }
   };
-  const cancel = event => { event.preventDefault(); interact(); };
+  const exit = () => { closeStory(); onExit?.(); };
+  dialog.querySelector('.story-close').onclick = exit;
+  const cancel = event => { event.preventDefault(); exit(); };
   dialog.addEventListener('cancel', cancel);
   cleanUp = () => { dialog.removeEventListener('cancel', cancel); dialog.removeEventListener('pointerdown', interact); dialog.removeEventListener('keydown', interact); };
 }

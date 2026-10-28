@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>折りGO！ タイトル画面</title>
+<style>
+html, body { margin:0; height:100%; overflow:hidden; background:#FCEEDC }
+body { background:linear-gradient(180deg, #FCEEDC, #F7CF8A 16%, #F2A877 36%, #EC9C8B 54%, #E5825F 74%, #D8805B) }
+#origo-root { position:fixed; inset:0; overflow:hidden }
+/* ===== ここから: アニメーション本体のCSS (base.css) ===== */
+#stage { --ground:#F2A877; --main:#FFFFFF; --second:#C9714F; --accent:#F7CF8A; color:var(--main); font-family:var(--sans, system-ui, sans-serif); --warm-cream:#FCEEDC; --warm-coral:#E5825F; --warm-rose:#EC9C8B; --warm-blush:#F5C6B5 }
+.ground { position:absolute; inset:0; background:linear-gradient(180deg, var(--warm-cream), var(--accent) 16%, var(--ground) 36%, var(--warm-rose) 54%, var(--warm-coral) 74%, color-mix(in srgb, var(--warm-coral) 60%, var(--second))) }
+.words { position:absolute; margin:0; display:flex; flex-direction:column; gap:24px } .words > * { margin:0 }
+.line { font-family:var(--sans, system-ui, sans-serif); font-size:190px; line-height:1; font-weight:900 } .sub { font-size:36px }
+.world { position:absolute; inset:0; transform-origin:540px 880px }
+.title-row { position:absolute; left:0; right:0; top:785px; display:flex; justify-content:center; align-items:flex-end } .title-row > * { margin:0 }
+.title-name { color:var(--main); letter-spacing:.02em; white-space:nowrap }
+.title-mark { flex:none; width:80px; height:190px }
+.glyph { display:inline-block; position:relative; transform-origin:50% 62% }
+.glyph-kanji { font-size:206px; -webkit-text-stroke:8px var(--main) }
+.glyph-kana { font-size:150px; -webkit-text-stroke:7px var(--main); margin-left:-4px }
+.glyph-fold::after { content:attr(data-c); position:absolute; left:0; top:0; color:color-mix(in srgb, var(--main) 84%, var(--second)); -webkit-text-stroke-color:color-mix(in srgb, var(--main) 84%, var(--second)); clip-path:polygon(100% 0, 100% 100%, 0 100%) }
+.art { position:absolute; inset:0; width:100%; height:100%; overflow:visible }
+.paper { stroke-width:1.4; stroke-linejoin:round }
+.paper-lit { fill:var(--main); stroke:var(--main) }
+.paper-mid { fill:color-mix(in srgb, var(--main) 92%, var(--second)); stroke:color-mix(in srgb, var(--main) 92%, var(--second)) }
+.paper-shade { fill:color-mix(in srgb, var(--main) 80%, var(--second)); stroke:color-mix(in srgb, var(--main) 80%, var(--second)) }
+/* ===== ここまで ===== */
+#stage { position:absolute; left:0; top:0; width:1080px; height:1920px; overflow:hidden; transform-origin:0 0; --sans:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","YuGothic","Noto Sans JP","Meiryo",system-ui,sans-serif }
+#origo-fx { position:absolute; left:0; top:0; width:1080px; height:1920px; pointer-events:none }
+</style>
+</head>
+<body>
+<div id="origo-root"><div id="stage"></div></div>
+<script>
+(function () {
+  'use strict';
+  /* ===== 小さな実行環境(kit): 元のアニメーションが使う道具だけを自前で用意 ===== */
+  const W = 1080, H = 1920, DURATION = 3.0;
+  const clamp01 = (x) => Math.min(1, Math.max(0, x));
+  const lerp = (a, b, x) => a + (b - a) * x;
+  const seg = (t, a, b) => clamp01((t - a) / (b - a));
+  const eo = (x) => 1 - Math.pow(1 - x, 3);
+  const eio = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+  const eob = (x, o) => { o = o === undefined ? 1.4 : o; const c3 = o + 1; return 1 + c3 * Math.pow(x - 1, 3) + o * Math.pow(x - 1, 2); };
+  const rng = (seed) => { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+
+  const stage = document.getElementById('stage');
+  const fxCanvas = document.createElement('canvas');
+  fxCanvas.id = 'origo-fx';
+  fxCanvas.width = W * 2; fxCanvas.height = H * 2;
+  const fx = fxCanvas.getContext('2d');
+  let scale = 1;
+
+  const kit = {
+    seg, lerp, eo, eio, eob, rng, clamp01, W, H, stage, fx,
+    h(html) { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild; },
+    srect(node) { const r = node.getBoundingClientRect(), s = stage.getBoundingClientRect(); return { x: (r.left - s.left) / scale, y: (r.top - s.top) / scale, w: r.width / scale, h: r.height / scale }; },
+    scene(id, def) { scenes[id] = def; },
+  };
+  const scenes = {};
+
+  /* ===== ここから: アニメーション本体 (scene-crane.js) ===== */
+  (function () {
+const { seg, lerp, eo, eio, eob, rng } = kit;
+const TAU = Math.PI * 2, D2R = Math.PI / 180, NS = 'http://www.w3.org/2000/svg';
+const OX = 540, OY = 880, RX = 440, RY = 260;
+const FOLDT = [0.66, 0.77, 0.87, 0.98], DOT0 = 1.32, LAND = 2.18;
+const ft = (i) => (FOLDT[i] !== undefined ? FOLDT[i] : Math.min(1.2, 0.66 + 0.11 * i));
+const ORDER = ['wf', 'tl', 'bl', 'br', 'nk', 'hd', 'wn'];
+const SIDE = { wf: 'paper-shade', tl: 'paper-mid', bl: 'paper-lit', br: 'paper-mid', nk: 'paper-lit', hd: 'paper-shade', wn: 'paper-lit' };
+const FRONT = { wf: 'paper-shade', tl: 'paper-mid', bl: 'paper-lit', br: 'paper-mid', nk: 'paper-mid', hd: 'paper-lit', wn: 'paper-lit' };
+const BAR = { wf: [[11,8],[0,-118],[30,-110]], tl: [[0,22],[0,34],[0,46]], bl: [[0,10],[-11,8],[0,46]], br: [[0,10],[11,8],[0,46]], nk: [[-11,8],[11,8],[0,-118]], hd: [[0,-118],[-6,-127],[7,-131]], wn: [[-11,8],[0,-118],[-30,-110]] };
+const ps = (a) => a.map((p) => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+function skyBg(t, ok) {
+  const sp = ok ? 'in oklab ' : '';
+  const v = (n) => 'var(--' + n + ')';
+  const a = (n, p) => 'color-mix(in srgb, var(--' + n + ') ' + p + '%, transparent)';
+  const x1 = (26 + 6 * Math.sin(0.35 * t)).toFixed(2), y1 = (20 + 2 * Math.sin(0.27 * t + 1)).toFixed(2);
+  const x2 = (80 - 5 * Math.sin(0.3 * t + 2)).toFixed(2), x3 = (18 + 5 * Math.sin(0.25 * t + 4)).toFixed(2), x4 = (50 + 4 * Math.sin(0.2 * t)).toFixed(2);
+  return [
+    'radial-gradient(' + sp + '90% 22% at ' + x4 + '% 0%, ' + a('warm-cream', 85) + ', transparent 72%)',
+    'radial-gradient(' + sp + '62% 26% at ' + x1 + '% ' + y1 + '%, ' + a('accent', 75) + ', transparent 70%)',
+    'radial-gradient(' + sp + '58% 22% at ' + x2 + '% 50%, ' + a('warm-rose', 55) + ', transparent 70%)',
+    'radial-gradient(' + sp + '60% 20% at ' + x3 + '% 40%, ' + a('ground', 55) + ', transparent 70%)',
+    'radial-gradient(' + sp + '95% 32% at ' + x4 + '% 104%, color-mix(in srgb, color-mix(in srgb, var(--warm-coral) 60%, var(--second)) 65%, transparent), transparent 72%)',
+    'linear-gradient(' + sp + '180deg, ' + v('warm-cream') + ' 0%, ' + v('accent') + ' 16%, ' + v('ground') + ' 36%, ' + v('warm-rose') + ' 54%, ' + v('warm-coral') + ' 74%, color-mix(in srgb, var(--warm-coral) 60%, var(--second)) 100%)',
+  ].join(', ');
+}
+
+function local(w) {
+  const k = (w + 1) / 2;
+  return {
+    wf: [[2,-8],[28,-6],[lerp(6,-12,k), lerp(60,-124,k)]],
+    tl: [[-24,4],[-40,16],[-124,-58]],
+    bl: [[0,-8],[-50,8],[0,34]],
+    br: [[0,-8],[50,8],[0,34]],
+    nk: [[24,4],[40,16],[114,-70]],
+    hd: [[114,-70],[102,-62],[136,-48]],
+    wn: [[-8,-6],[22,-4],[lerp(-26,-46,k), lerp(72,-136,k)]],
+  };
+}
+function orbit(t) {
+  const u = seg(t, -0.35, 1.75), e = lerp(u, eio(u), 0.3), ph = (-50 - 350 * e) * D2R;
+  return [OX + RX * Math.cos(ph), OY + RY * Math.sin(ph), ph];
+}
+function flap(t) {
+  const ph = t < 1.7 ? 3 * t : 5.1 + 3 * (1 - Math.exp(-2.5 * (t - 1.7))) / 2.5;
+  let w = Math.sin(TAU * ph + 1.2);
+  w = Math.sign(w) * Math.pow(Math.abs(w), 0.75);
+  return lerp(w, 1, eio(seg(t, 1.75, 2.0)));
+}
+function pose(t, L, sB) {
+  const bt = (u) => eio(seg(u, 1.45, 2.15));
+  const at = (u) => { const o = orbit(u), b = bt(u); return [lerp(o[0], L[0], b), lerp(o[1], L[1], b)]; };
+  const o = orbit(t), p = at(t), a = at(t - 0.01), c = at(t + 0.01);
+  const vx = c[0] - a[0], vy = c[1] - a[1], b = bt(t), b2 = eio(seg(t, 1.7, 2.1)), w = flap(t);
+  const f = lerp(vx / Math.sqrt(vx * vx + 36), 1, b2);
+  return { x: p[0], y: p[1] + 8 * w * (1 - b), s: lerp(0.8 + 0.16 * Math.sin(o[2]), sB, b), f, rot: 0.45 * Math.atan2(vy, Math.abs(vx) + 1) * f * (1 - b2), w, vx: vx * 50, vy: vy * 50 };
+}
+function place(q, P) {
+  const lx = q[0] * P.s * P.f, ly = q[1] * P.s, c = Math.cos(P.rot), s = Math.sin(P.rot);
+  return [P.x + lx * c - ly * s, P.y + lx * s + ly * c];
+}
+function drawDot(self, t, a, b, setCls) {
+  a.style.opacity = b.style.opacity = 1;
+  const q = (t - DOT0) / 0.11;
+  if (q < 4) {
+    const kk = Math.floor(q), c = Math.cos(Math.PI * eio(q - kk));
+    const [x0, y0, x1, y1] = self.rects[kk];
+    const f0 = kk % 2 ? 'paper-shade' : 'paper-lit', f1 = kk % 2 ? 'paper-lit' : 'paper-shade';
+    let s, f;
+    if (kk % 2 === 0) { const m = (y0 + y1) / 2; s = [[x0, m], [x1, m], [x1, y1], [x0, y1]]; f = [[x0, y0], [x1, y0], [x1, m], [x0, m]].map((v) => [v[0], m + (v[1] - m) * c]); }
+    else { const m = (x0 + x1) / 2; s = [[x0, y0], [m, y0], [m, y1], [x0, y1]]; f = [[m, y0], [x1, y0], [x1, y1], [m, y1]].map((v) => [m + (v[0] - m) * c, v[1]]); }
+    a.setAttribute('points', ps(s)); b.setAttribute('points', ps(f));
+    setCls(a, 'paper ' + f0); setCls(b, 'paper ' + (c < 0 ? f1 : f0));
+    return;
+  }
+  const g = seg(t, DOT0 + 0.44, DOT0 + 0.63), e = eio(g);
+  const [x0, y0, x1, y1] = self.rects[4], h = (x1 - x0) / 2;
+  const cx = lerp((x0 + x1) / 2, self.dotC[0], e), cy = lerp((y0 + y1) / 2, self.dotC[1], e) - 24 * Math.sin(Math.PI * g);
+  const an = 45 * eob(g, 1.6) * D2R, sc = 0.95 * (1 + 0.02 * Math.sin(TAU * 0.9 * (t - 2.3)) * seg(t, 2.3, 2.6));
+  const R = (x, y) => [cx + (x * Math.cos(an) - y * Math.sin(an)) * h * sc, cy + (x * Math.sin(an) + y * Math.cos(an)) * h * sc];
+  a.setAttribute('points', ps([R(-1, -1), R(-1, 1), R(1, 1)]));
+  b.setAttribute('points', ps([R(-1, -1), R(1, -1), R(1, 1)]));
+  setCls(a, 'paper paper-lit'); setCls(b, 'paper paper-shade');
+}
+function paperTexture() {
+  const TS = 256, tex = document.createElement('canvas');
+  tex.width = tex.height = TS;
+  const tc = tex.getContext('2d'), im = tc.createImageData(TS, TS), G = rng(5);
+  for (let i = 0; i < im.data.length; i += 4) { const v = G(); im.data[i] = im.data[i + 1] = im.data[i + 2] = 255; im.data[i + 3] = v > 0.55 ? Math.round((v - 0.55) / 0.45 * 12) : 0; }
+  tc.putImageData(im, 0, 0);
+  const wrap = (fn) => { for (const ox of [-TS, 0, TS]) for (const oy of [-TS, 0, TS]) fn(ox, oy); };
+  tc.lineCap = 'round';
+  tc.strokeStyle = 'rgba(255,255,255,0.06)';
+  for (let i = 0; i < 110; i++) {
+    const x = G() * TS, y = G() * TS, a = G() * TAU, l = 8 + G() * 24, bend = (G() - 0.5) * 1.2;
+    tc.lineWidth = 0.5 + G() * 0.7;
+    wrap((ox, oy) => { tc.beginPath(); tc.moveTo(x + ox, y + oy); tc.quadraticCurveTo(x + ox + Math.cos(a + bend) * l * 0.5, y + oy + Math.sin(a + bend) * l * 0.5, x + ox + Math.cos(a) * l, y + oy + Math.sin(a) * l); tc.stroke(); });
+  }
+  return tex;
+}
+
+kit.scene('crane', {
+  init(kit) {
+    const st = kit.stage;
+    let bird = '';
+    for (const id of ORDER) bird += '<polygon class="paper ' + SIDE[id] + ' crane-' + id + '"/>';
+    st.append(kit.h('<div class="ground"><div class="crane-sky" style="position:absolute;inset:0"></div>' +
+      '<canvas class="art crane-grain" width="1080" height="1920"></canvas><div class="world crane-world">' +
+      '<div class="title-row"><h1 class="line title-name crane-name" lang="ja">折りGO</h1><span class="title-mark crane-mark"></span></div>' +
+      '<svg class="art" viewBox="0 0 1080 1920"><g class="crane-papers"></g><g>' + bird + '</g></svg></div></div>'));
+    this.sky = st.querySelector('.crane-sky').style;
+    this.ok = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('background-image', 'radial-gradient(in oklab 50% 50% at 50% 50%, red, transparent)');
+    this.sky.background = skyBg(0, false);
+    const g2 = st.querySelector('.crane-grain').getContext('2d');
+    g2.fillStyle = g2.createPattern(paperTexture(), 'repeat'); g2.fillRect(0, 0, 1080, 1920);
+    this.world = st.querySelector('.crane-world').style;
+    const nameEl = st.querySelector('.crane-name'), txt = nameEl.textContent;
+    nameEl.textContent = '';
+    this.ch = [...txt].map((c) => { const s = document.createElement('span'); s.className = 'glyph glyph-fold crane-ch' + (/[\u4e00-\u9fff]/.test(c) ? ' glyph-kanji' : /[\u3040-\u30ff]/.test(c) ? ' glyph-kana' : ''); s.dataset.c = c; s.textContent = c; nameEl.append(s); return s; });
+    const cells = this.ch.map((s) => { const r = kit.srect(s); return [r.x + r.w / 2, r.y + r.h / 2]; });
+    this.chs = this.ch.map((s) => s.style);
+    const mr = kit.srect(st.querySelector('.crane-mark'));
+    this.KX = mr.x + mr.w / 2;
+    const top = mr.y + 0.05 * mr.h, bot = mr.y + 0.66 * mr.h;
+    this.sB = (bot - top) / 164;
+    this.L = [this.KX, top + 118 * this.sB];
+    this.dotC = [this.KX, mr.y + 0.83 * mr.h];
+    this.PX = cells.map((c) => c[0]).concat([this.KX]);
+    this.PY = cells.map((c) => c[1]).concat([mr.y + mr.h / 2]);
+    const n = this.PX.length;
+    const rank = this.PX.map((x) => this.PX.filter((y) => Math.abs(y - OX) < Math.abs(x - OX)).length);
+    this.S = rank.map((r) => 0.08 + 0.05 * r);
+    const pg = st.querySelector('.crane-papers');
+    this.pp = [];
+    for (let i = 0; i < 2 * n; i++) { const p = document.createElementNS(NS, 'polygon'); p.setAttribute('class', 'paper paper-lit'); pg.append(p); this.pp.push(p); }
+    let r = [this.KX - 60, this.PY[n - 1] - 60, this.KX + 60, this.PY[n - 1] + 60];
+    this.rects = [r];
+    for (let k = 0; k < 4; k++) { const [x0, y0, x1, y1] = r; r = k % 2 === 0 ? [x0, (y0 + y1) / 2, x1, y1] : [x0, y0, (x0 + x1) / 2, y1]; this.rects.push(r); }
+    this.poly = {};
+    for (const id of ORDER) this.poly[id] = st.querySelector('.crane-' + id);
+    this.cls = new Map();
+    const cs = getComputedStyle(st);
+    const hex = (v, d) => (/^#[0-9a-f]{6}$/i.test((v || '').trim()) ? v.trim() : d);
+    const main = hex(cs.getPropertyValue('--main'), '#ffffff'), acc = hex(cs.getPropertyValue('--accent'), '#f7cf8a');
+    const mix = (a, b, k) => '#' + [1, 3, 5].map((i) => Math.round(lerp(parseInt(a.substr(i, 2), 16), parseInt(b.substr(i, 2), 16), k)).toString(16).padStart(2, '0')).join('');
+    this.cMain = main; this.cTint = mix(main, acc, 0.75);
+    const R = rng(23);
+    this.dust = [];
+    const add = (o) => this.dust.push(Object.assign({ sw: 4 + R() * 12, om: 1.4 + R() * 1.8, ph: R() * TAU, tw: 0.8 + R() * 1.2, r: 0.9 + R() * 1.9, drop: R() < 0.14, tint: R() < 0.3 }, o));
+    for (let i = 0; i < 200; i++) {
+      const te = -0.4 + 2.45 * (i + R() * 0.8) / 200;
+      const P = pose(te, this.L, this.sB), q = local(P.w);
+      const src = i % 3 === 2 ? q.tl[2] : (i % 3 ? q.wf[2] : q.wn[2]);
+      const e = place([src[0] * (0.6 + R() * 0.4), src[1] * (0.6 + R() * 0.4)], P);
+      add({ te, x: e[0], y: e[1], vx: P.vx * 0.1 + (R() - 0.5) * 50, vy: P.vy * 0.1 + (R() - 0.6) * 40, g: 22 + R() * 30, life: 1.1 + R() * 1.1 });
+    }
+    const burst = (te, x, y, cnt, rad) => { for (let i = 0; i < cnt; i++) { const an = R() * TAU, sp = 50 + R() * 120, rr = rad * R(); add({ te: te + R() * 0.06, x: x + Math.cos(an) * rr, y: y + Math.sin(an) * rr, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp - 30, g: 20 + R() * 20, life: 0.7 + R() * 0.7 }); } };
+    cells.forEach((c, i) => burst(ft(i) + 0.27, c[0], c[1], 9, 70));
+    burst(DOT0 + 0.62, this.dotC[0], this.dotC[1], 8, 20);
+    burst(LAND, this.KX, this.L[1], 16, 50);
+  },
+  render(t, k) {
+    k = k || kit;
+    this.sky.background = skyBg(t, this.ok);
+    const setCls = (el, c) => { if (this.cls.get(el) !== c) { this.cls.set(el, c); el.setAttribute('class', c); } };
+    this.world.transform = 'scale(' + (1 + 0.015 * eio(seg(t, 2.2, 3.2))).toFixed(5) + ')';
+    const n = this.PX.length;
+    for (let i = 0; i < n; i++) {
+      const a = this.pp[2 * i], b = this.pp[2 * i + 1], isDot = i === n - 1;
+      if (isDot && t >= DOT0) { drawDot(this, t, a, b, setCls); continue; }
+      const p = seg(t, this.S[i], this.S[i] + 0.38), e = eo(p);
+      const cx = lerp(OX, this.PX[i], e), cy = lerp(OY, this.PY[i], e) - 46 * Math.sin(Math.PI * p);
+      const hh = lerp(90, isDot ? 60 : 75, e);
+      let cA = 1, sxB = 1, vis = true;
+      if (!isDot) { const F = ft(i); cA = Math.cos(Math.PI * eio(seg(t, F, F + 0.14))); sxB = Math.cos(Math.PI / 2 * eio(seg(t, F + 0.14, F + 0.25))); vis = t < F + 0.25; }
+      a.style.opacity = b.style.opacity = vis ? 1 : 0;
+      if (!vis) continue;
+      const S = Math.cos(TAU * eio(p)) * sxB, P = (x, y) => [cx + x * S, cy + y];
+      a.setAttribute('points', ps([P(-hh, -hh), P(-hh, hh), P(hh, hh)]));
+      b.setAttribute('points', ps([P(-hh, -hh), P(hh * cA, -hh * cA), P(hh, hh)]));
+      setCls(a, 'paper ' + (S < 0 ? 'paper-shade' : 'paper-lit'));
+      setCls(b, 'paper ' + ((S < 0) !== (cA < 0) ? 'paper-shade' : 'paper-lit'));
+    }
+    this.chs.forEach((s, i) => {
+      const F = ft(i) + 0.25, g = seg(t, F, F + 0.17);
+      s.opacity = t >= F ? 1 : 0;
+      const by = -3 * Math.sin(TAU * 0.9 * (t - F - 0.3) + i) * seg(t, F + 0.3, F + 0.6);
+      s.transform = 'translateY(' + by.toFixed(2) + 'px) rotate(' + lerp(-8, 0, eo(g)).toFixed(2) + 'deg) scale(' + eob(g, 1.7).toFixed(4) + ',' + lerp(0.86, 1, eo(g)).toFixed(4) + ')';
+    });
+    const P = pose(Math.min(t, 2.2), this.L, this.sB), pts = local(P.w);
+    const M = eio(seg(t, 1.92, 2.2)), ts = t - LAND;
+    const sq = ts > 0 ? 0.07 * Math.exp(-7 * ts) * Math.sin(17 * ts) : 0;
+    const idle = seg(t, 2.3, 2.55), bob = 1.6 * Math.sin(TAU * 1.1 * (t - 2.3)) * idle, flt = 2.5 * Math.sin(TAU * 2.2 * t) * idle;
+    for (const id of ORDER) {
+      const el = this.poly[id];
+      el.setAttribute('points', ps(pts[id].map((q, j) => {
+        const c = place(q, P), g = BAR[id][j];
+        const gx = g[0] + (Math.abs(g[0]) === 30 ? Math.sign(g[0]) * flt : 0), gy = 46 + (g[1] - 46) * (1 - sq);
+        return [lerp(c[0], this.L[0] + gx * this.sB, M), lerp(c[1], this.L[1] + gy * this.sB + bob, M)];
+      })));
+      setCls(el, 'paper ' + (M > 0.5 ? FRONT[id] : SIDE[id]));
+    }
+    this.poly.tl.style.opacity = 1 - M;
+    const fx = k.fx && k.fx.getContext ? k.fx.getContext('2d') : k.fx;
+    if (!fx) return;
+    fx.save();
+    fx.shadowColor = this.cMain; fx.shadowBlur = 7;
+    for (const d of this.dust) {
+      const a = t - d.te;
+      if (a < 0 || a > d.life) continue;
+      const dr = (1 - Math.exp(-2.2 * a)) / 2.2;
+      const x = d.x + d.vx * dr + d.sw * Math.sin(d.om * a + d.ph) * Math.min(1, a * 2);
+      const y = d.y + d.vy * dr + d.g * a + 14 * a * a;
+      const al = seg(a, 0, 0.1) * (1 - seg(a, d.life * 0.5, d.life)) * (0.62 + 0.38 * Math.sin(TAU * d.tw * a + d.ph));
+      if (al <= 0.01) continue;
+      fx.globalAlpha = al * 0.95;
+      fx.fillStyle = d.tint ? this.cTint : this.cMain;
+      fx.beginPath();
+      if (d.drop) { const rr = d.r * 1.3; fx.moveTo(x, y - rr * 3.4); fx.quadraticCurveTo(x + rr * 1.3, y - rr * 0.3, x, y + rr); fx.quadraticCurveTo(x - rr * 1.3, y - rr * 0.3, x, y - rr * 3.4); }
+      else fx.arc(x, y, d.r, 0, TAU);
+      fx.fill();
+    }
+    fx.restore();
+  },
+});
+
+  })();
+  /* ===== ここまで ===== */
+
+  /* ===== 画面に合わせた拡大縮小 ===== */
+  function fit() {
+    const root = document.getElementById('origo-root');
+    scale = Math.min(root.clientWidth / W, root.clientHeight / H);
+    const x = (root.clientWidth - W * scale) / 2, y = (root.clientHeight - H * scale) / 2;
+    stage.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  /* ===== 再生制御 ===== */
+  const scene = scenes.crane;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let t0 = 0, raf = 0, ready = false, doneSent = false, offset = 0;
+
+  function draw(t) {
+    fx.setTransform(1, 0, 0, 1, 0, 0);
+    fx.clearRect(0, 0, W * 2, H * 2);
+    fx.setTransform(2, 0, 0, 2, 0, 0);
+    scene.render(t, kit);
+  }
+  function finish() {
+    if (doneSent) return; doneSent = true;
+    window.dispatchEvent(new CustomEvent('origo:done'));
+    if (typeof api.onDone === 'function') api.onDone();
+  }
+  function loop(now) {
+    const t = (now - t0) / 1000 + offset;
+    draw(t);
+    if (t >= DURATION - 0.4) finish();
+    raf = requestAnimationFrame(loop);
+  }
+  const api = {
+    duration: DURATION,
+    onDone: null,
+    play() { if (!ready) return; cancelAnimationFrame(raf); doneSent = false; offset = 0; t0 = performance.now(); if (reduce) { draw(DURATION); finish(); return; } raf = requestAnimationFrame(loop); },
+    replay() { this.play(); },
+    seek(t) { if (!ready) return; cancelAnimationFrame(raf); draw(t); },
+    stop() { cancelAnimationFrame(raf); },
+  };
+  window.OrigoTitle = api;
+
+  (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(() => {
+    scene.init(kit);
+    stage.appendChild(fxCanvas);
+    const h1 = stage.querySelector('.crane-name');
+    if (h1) { h1.setAttribute('aria-label', '折りGO！'); h1.querySelectorAll('.glyph').forEach((g) => g.setAttribute('aria-hidden', 'true')); }
+    ready = true;
+    draw(0);
+    api.play();
+  });
+})();
+</script>
+</body>
+</html>
