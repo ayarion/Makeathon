@@ -3,7 +3,7 @@
  * Real AR: WebXR immersive-ar + horizontal hit-test + DOM overlay. Positions
  * are metres in XR local space. Capture checks DEVICE-to-character distance,
  * never a body position or evidence of leaving a bed.
- * Camera: a fixed 18cm ArUco marker provides approximate floor-plane proximity.
+ * Camera: 8th Wall SLAM tracks device position and floor surfaces without a marker.
  * Camera pixels are processed in memory on device; nothing is recorded or uploaded.
  * The visual-only demo cannot complete a capture.
  * Animals are the Three.js origami models (./origami3d.ts); animalSVG stays as the no-WebGL fallback.
@@ -35,7 +35,7 @@ function animalSVG(animal) {
 const STYLES = `
 .morning-stage{position:relative;width:100%;height:100%;min-height:520px;overflow:hidden;isolation:isolate;background:#d8e1d3;color:#173c54;font-family:inherit;border-radius:24px}
 .morning-stage *{box-sizing:border-box}.morning-stage button{font:inherit;font-size:18px;font-weight:700;min-height:48px;border:0;border-radius:16px;padding:12px 18px;cursor:pointer;touch-action:manipulation}.morning-stage button:focus-visible{outline:4px solid #d1a85d;outline-offset:4px}.morning-stage button:disabled{cursor:default;opacity:.65}.morning-stage button:active:not(:disabled){transform:translateY(2px)}
-.morning-stage__camera,.morning-stage__gl,.morning-stage__landscape{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.morning-stage__landscape{background:radial-gradient(ellipse at 68% 27%,#fff2c9 0 11%,transparent 11.4%),linear-gradient(#d6e4df 0 32%,#aec5ab 32% 36%,#789c83 36% 52%,#496f63 52%)}
+.morning-stage__feed,.morning-stage__gl,.morning-stage__landscape{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.morning-stage__landscape{background:radial-gradient(ellipse at 68% 27%,#fff2c9 0 11%,transparent 11.4%),linear-gradient(#d6e4df 0 32%,#aec5ab 32% 36%,#789c83 36% 52%,#496f63 52%)}
 .morning-stage__landscape:before,.morning-stage__landscape:after{content:'';position:absolute;width:150%;height:38%;left:-20%;bottom:-9%;border-radius:50%;background:#386258;box-shadow:0 -6px 9px #193e4420;transform:rotate(8deg)}.morning-stage__landscape:after{bottom:13%;left:28%;height:22%;background:#88aa90;transform:rotate(-14deg)}
 .morning-stage__grain{position:absolute;inset:0;pointer-events:none;opacity:.15;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23fff' filter='url(%23n)' opacity='.65' d='M0 0h200v200H0z'/%3E%3C/svg%3E")}
 .morning-stage__top{position:absolute;z-index:4;left:16px;right:16px;top:max(16px,env(safe-area-inset-top));display:flex;align-items:start;justify-content:space-between;gap:10px}.morning-stage__badge{font-size:18px;line-height:1.35;font-weight:800;letter-spacing:.03em;color:#173c54;background:#fff9ecee;border:1px solid #e3d6bf;padding:10px 12px;border-radius:13px;box-shadow:0 3px 0 #203d421a}.morning-stage__top button{background:#fff9eced;color:#173c54;padding:10px 14px;white-space:nowrap}
@@ -87,7 +87,7 @@ export class MorningExperience {
     try {
       if (mode === 'ar') await this._startAR(token);
       else {
-        if (mode === 'camera') { await this._startCamera(token); this.markerGate = new MarkerApproachGate(); this.markerDetector = new markerLibrary.AR.Detector({dictionaryName:'ARUCO'}); this.markerCanvas = document.createElement('canvas'); this.markerContext = this.markerCanvas.getContext('2d',{willReadFrequently:true}); }
+        if (mode === 'camera') { await this._startWorldTracking(token); return; }
         if (token !== this.token || !this.active) return;
         this._prepareDemoPlacement();
         this.animationFrame = requestAnimationFrame((time) => this._demoFrame(time));
@@ -108,9 +108,9 @@ export class MorningExperience {
     }
     const stage = document.createElement('section');
     stage.className = 'morning-stage'; stage.setAttribute('aria-label', '朝の追いかけっこ');
-    stage.innerHTML = `<div class="morning-stage__landscape" ${this.mode === 'demo' ? '' : 'hidden'}></div><video class="morning-stage__camera" autoplay muted playsinline ${this.mode === 'camera' ? '' : 'hidden'}></video><canvas class="morning-stage__gl" ${this.mode === 'ar' ? '' : 'hidden'} aria-hidden="true"></canvas><div class="morning-stage__grain" ${this.mode === 'demo' ? '' : 'hidden'}></div><div class="morning-stage__creatures" ${this.mode === 'ar' ? 'hidden' : ''}></div><div class="morning-stage__feedback" hidden aria-hidden="true"></div><div class="morning-stage__top"><span class="morning-stage__badge">${this.mode === 'ar' ? 'AR' : this.mode === 'camera' ? 'マーカーで鬼ごっこ' : 'DEMO'}</span></div><div class="morning-stage__bottom"><p class="morning-stage__status" role="status" aria-live="polite"></p><div class="morning-stage__actions"><button type="button" class="morning-stage__primary" data-action="primary" disabled>ここで決定</button></div></div>`;
+    stage.innerHTML = `<div class="morning-stage__landscape" ${this.mode === 'demo' ? '' : 'hidden'}></div><canvas class="morning-stage__feed" ${this.mode === 'camera' ? '' : 'hidden'}></canvas><canvas class="morning-stage__gl" ${this.mode !== 'demo' ? '' : 'hidden'} aria-hidden="true"></canvas><div class="morning-stage__grain" ${this.mode === 'demo' ? '' : 'hidden'}></div><div class="morning-stage__creatures" ${this.mode !== 'demo' ? 'hidden' : ''}></div><div class="morning-stage__feedback" hidden aria-hidden="true"></div><div class="morning-stage__top"><span class="morning-stage__badge">${this.mode === 'ar' ? 'AR' : this.mode === 'camera' ? '鬼ごっこ' : 'DEMO'}</span></div><div class="morning-stage__bottom"><p class="morning-stage__status" role="status" aria-live="polite"></p><div class="morning-stage__actions"><button type="button" class="morning-stage__primary" data-action="primary" disabled>ここで決定</button></div></div>`;
     this.mount.replaceChildren(stage); this.stage = stage;
-    this.video = stage.querySelector('video'); this.canvas = stage.querySelector('canvas');
+    this.feed = stage.querySelector('.morning-stage__feed'); this.canvas = stage.querySelector('.morning-stage__gl');
     this.status = stage.querySelector('[role=status]'); this.primary = stage.querySelector('[data-action=primary]'); this.muteButton = stage.querySelector('[data-action=mute]'); this.feedback = stage.querySelector('.morning-stage__feedback');
     this.creatures = []; this.views = [];
     const types = this.kinds;
@@ -119,14 +119,14 @@ export class MorningExperience {
       if (index) element.dataset.small = '';
       element.addEventListener('click', () => this.capture()); element.addEventListener('keydown', event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();this.capture();}}); stage.querySelector('.morning-stage__creatures').append(element); this.creatures.push(element);
       // Live origami in DEMO/camera; WebXR draws the same models in the session instead.
-      const view = this.mode === 'ar' ? null : mountAnimal(element, { kind, paper: this.papers[index], zoom: 1.3, heading: .25 });
+      const view = this.mode !== 'demo' ? null : mountAnimal(element, { kind, paper: this.papers[index], zoom: 1.3, heading: .25 });
       if (view) element.classList.add('has-origami'); else element.innerHTML = animalSVG(kind);
       this.views.push(view);
     });
     this.primary.onclick = () => {
       if (this.paused) { void this._resume(); return; }
       if (this.phase === 'capture-ready') return;
-      if (this.mode === 'ar') this._place(); else if (this.phase === 'placing') this._placementSuccess(); else this.advanceDemo();
+      if (this.mode === 'camera') this._placeWorld(); else if (this.mode === 'ar') this._place(); else if (this.phase === 'placing') this._placementSuccess(); else this.advanceDemo();
     };
     this.canvas.addEventListener('click', event => this._tapTrackedAnimal(event));
 
@@ -141,63 +141,127 @@ export class MorningExperience {
     this.onState({ phase, message, mode: this.mode, ...extra });
   }
 
-  async _startCamera(token) {
-    if (!window.isSecureContext) throw error('insecure', 'カメラにはHTTPS接続が必要です。');
-    if (!navigator.mediaDevices?.getUserMedia) throw error('camera-unavailable', 'このブラウザではカメラを使えません。Safariなどで開き直してね。');
-    let abandoned = false, acquiredStream = null, timer, cancel;
-    const releasePending = () => {
-      abandoned = true;
-      if (acquiredStream) {
-        if (this.stream === acquiredStream) this._releaseCamera();
-        else acquiredStream.getTracks().forEach(track => track.stop());
-        acquiredStream = null;
-      }
+  async _startWorldTracking(token) {
+    const XR8 = await loadWorldEngine();
+    await XR8.loadChunk('slam');
+    if(token!==this.token || !this.active)return;
+    this.worldStarted=false;this.worldEngine=XR8; this.worldGate=new WorldApproachGate();
+    this.renderer=new OrigamiXR(this.canvas);this.renderer.cast(this.kinds,this.papers);
+    const resize=()=>{
+      if(!this.feed || !this.active)return;
+      const dpr=Math.min(devicePixelRatio||1,2);
+      this.feed.width=Math.round(this.stage.clientWidth*dpr);
+      this.feed.height=Math.round(this.stage.clientHeight*dpr);
+      if(this.worldStarted)XR8.XrController.updateCameraProjectionMatrix({cam:{pixelRectWidth:this.feed.width,pixelRectHeight:this.feed.height,nearClipPlane:.03,farClipPlane:20}});
     };
-    const cancelled = new Promise(resolve => { cancel = () => { releasePending(); resolve(); }; });
-    this._cancelCameraStart = cancel;
-    const deadline = new Promise((resolve, reject) => {
-      timer = setTimeout(() => {
-        if (token !== this.token || !this.active) { cancel(); return; }
-        releasePending();
-        reject(error('CAMERA_TIMEOUT', 'カメラの準備に時間がかかっています。カメラの許可を確認して、もう一度ためしてね。'));
-      }, 20000);
+    this.worldResize=new ResizeObserver(resize);this.worldResize.observe(this.stage);
+    XR8.XrController.configure({disableWorldTracking:false,enableWorldPoints:true,scale:'absolute',mirroredDisplay:false});
+    await new Promise((resolve,reject)=>{
+      let ready=false;
+      const finish=(failure)=>{clearTimeout(this.worldStartTimer);this.cancelWorldStart=null;if(failure)reject(failure);else resolve();};
+      this.cancelWorldStart=()=>finish();
+      this.worldStartTimer=setTimeout(()=>finish(error('world-timeout','ARの準備に時間がかかっています。接続とカメラの許可を確認してね。')),30000);
+      const failure=cause=>{
+        if(token!==this.token || !this.active)return;
+        if(!ready)finish(error('world-start',cause?.message||'カメラと動きの検出を許可して、もう一度ためしてね。'));
+        else {this._pause('追跡が止まったよ。もう一度床を写してね');this.onError(cause);}
+      };
+      XR8.addCameraPipelineModules([
+        XR8.GlTextureRenderer.pipelineModule(),XR8.XrController.pipelineModule(),
+        {name:'origo-world',
+          onStart:()=>{
+            if(token!==this.token || !this.active){XR8.stop();return;}
+            this.worldStarted=true;resize();XR8.XrController.updateCameraProjectionMatrix({origin:{x:0,y:1.4,z:0},facing:{x:0,y:0,z:0,w:1}});
+            this._resetWorldPlacement();ready=true;finish();
+          },
+          onUpdate:({processCpuResult})=>{if(token===this.token&&this.active&&!this.paused)this._worldFrame(processCpuResult?.reality,performance.now());},
+          onException:failure,
+          onCameraStatusChange:({status})=>{if(status==='failed')failure(new Error('カメラを開けませんでした。Safariのカメラ許可を確認してね。'));},
+        }
+      ]);
+      try{XR8.run({canvas:this.feed,allowedDevices:XR8.XrConfig.device().MOBILE,cameraConfig:{direction:XR8.XrConfig.camera().BACK}});}catch(cause){failure(cause);}
     });
-    try {
-      // The browser may leave permission pending indefinitely. The losing
-      // promise remains observed so a late denial never becomes unhandled.
-      const camera = navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } }).then(async stream => {
-        if (abandoned || token !== this.token || !this.active) { stream.getTracks().forEach(track => track.stop()); return; }
-        acquiredStream = stream; this.stream = stream;
-        const video = this.video;
-        video.srcObject = stream;
-        const facing = stream.getVideoTracks()[0]?.getSettings?.().facingMode;
-        // Keep the marker and camera projections in the same coordinate system.
-        video.classList.remove('is-mirrored');
-        await video.play();
-        if (abandoned || token !== this.token || !this.active) { releasePending(); return; }
-        stream.getVideoTracks().forEach(track => track.addEventListener('ended', () => {
-          if (!this.active || this.paused || token !== this.token) return;
-          this._pause('カメラが止まりました');
-        }, { once: true }));
-      });
-      await Promise.race([camera, deadline, cancelled]);
-    } finally {
-      clearTimeout(timer);
-      if (this._cancelCameraStart === cancel) this._cancelCameraStart = null;
+  }
+
+  _resetWorldPlacement() {
+    clearTimeout(this.placementTimer);
+    this.worldGate?.reset();this.origin=null;this.placement=null;this.viewer=null;this.worldFrameAt=0;this.floorSince=null;
+    this.stage.classList.remove('is-capture-ready');if(this.feedback)this.feedback.hidden=true;
+    this.primary.hidden=false;this.primary.disabled=true;this.primary.textContent='ここで決定';
+    this.renderer?.show({});this._state('placing','床を写してください');
+  }
+
+  _placeWorld() {
+    if(!this.active||this.paused||this.phase!=='placing'||!this.placement||!this.viewer||performance.now()-this.worldFrameAt>250||!this.floorSince||performance.now()-this.floorSince<600)return false;
+    this.origin=[...this.placement];this.position=[...this.origin];this.initialViewer=[...this.viewer];
+    this.worldGate.begin(this.viewer);
+    const dx=this.origin[0]-this.viewer[0],dz=this.origin[2]-this.viewer[2],len=Math.hypot(dx,dz);
+    this.forward=[dx/len,0,dz/len];this.target=this._worldTarget(0);
+    return this._placementSuccess();
+  }
+
+  _worldTarget(side) {
+    // Stay in a bounded patch beyond the placement point, never drift toward the start.
+    return [this.origin[0]+this.forward[0]*.75-this.forward[2]*side,this.origin[1],this.origin[2]+this.forward[2]*.75+this.forward[0]*side];
+  }
+
+  _worldFrame(reality,time) {
+    if(this.phase==='capturing')return;
+    const valid=reality?.trackingStatus==='NORMAL' && reality.trackingReason!=='INITIALIZING' && validPoint(reality.position) && validPoint(reality.rotation) && Number.isFinite(reality.rotation.w) && reality.intrinsics?.length===16 && Array.from(reality.intrinsics).every(Number.isFinite);
+    if(!valid){
+      this.worldGate.update(null,null,time,false);this.floorSince=null;this.placement=null;this.primary.disabled=true;
+      this.stage.classList.remove('is-capture-ready');this.renderer?.show({});this.renderer?.render(0);
+      if(!this.worldGate.initial && this.origin)this._resetWorldPlacement();
+      if(this.phase==='capture-ready')this._state('chasing','床をゆっくり写してね');
+      else if(this.phase==='placing')this._state('placing','床を写してください。スマホをゆっくり左右に動かしてね');
+      return;
     }
+    const dt=this.worldFrameAt?Math.min((time-this.worldFrameAt)/1000,.05):0;
+    this.worldFrameAt=time;this.viewer=[reality.position.x,reality.position.y,reality.position.z];
+    this.renderer.trackedCamera(reality.position,reality.rotation,reality.intrinsics,this.feed.width,this.feed.height);
+    if(!this.origin){
+      // Accept tracked points near the estimated ground plane, never a screen-space guess.
+      const hits=this.worldEngine.XrController.hitTest(.5,.62,['FEATURE_POINT']);
+      const hit=hits.find(h=>validPoint(h.position)&&['FEATURE_POINT','DETECTED_SURFACE','ESTIMATED_SURFACE'].includes(h.type)&&Math.abs(h.position.y)<.2&&this.viewer[1]-h.position.y>.3&&Math.hypot(h.position.x-this.viewer[0],h.position.z-this.viewer[2])>=1.5&&Math.hypot(h.position.x-this.viewer[0],h.position.z-this.viewer[2])<=3.5);
+      const next=hit?[hit.position.x,hit.position.y,hit.position.z]:null;
+      if(!next||!this.placement||planarDistance(next,this.placement)>.25)this.floorSince=next?time:null;
+      this.placement=next;this.primary.disabled=!next||time-this.floorSince<600;
+      this._state('placing',!next?'床を写してください。少し先の床をゆっくり見渡してね':this.primary.disabled?'床の位置を確認しているよ':'ここから鶴を追いかけよう');
+    }else{
+      this.worldGate.update(this.viewer,this.position,time,true);
+      if(!this.worldGate.initial){this._resetWorldPlacement();return;}
+      if(this.phase==='chasing'||this.phase==='capture-ready'){
+        const near=this.worldGate.near;
+        if(this.worldGate.canCapture(time))this._readyToCapture();
+        else if(this.phase==='capture-ready'){this.stage.classList.remove('is-capture-ready');this._state('chasing','鶴のところまで歩いて近づこう');}
+        if(!near){
+          this.elapsed+=dt;
+          if(this.elapsed>=this.nextTurn){this.moves++;this.target=this._worldTarget((this.moves%2?1:-1)*.45);this.nextTurn=this.elapsed+2;}
+          const gap=planarDistance(this.position,this.target),step=Math.min(gap,.4*dt);
+          if(gap>.001){this.position[0]+=(this.target[0]-this.position[0])/gap*step;this.position[2]+=(this.target[2]-this.position[2])/gap*step;}
+        }
+      }
+    }
+    this.renderer.show({reticle:!this.origin?this.placement:null,animals:!!this.origin});
+    if(this.origin)this.kinds.forEach((kind,index)=>{
+      const at=[this.position[0]+index*.15,this.position[1],this.position[2]];
+      const running=this.phase==='chasing'&&!this.worldGate.near;
+      const angle=running?Math.atan2(this.target[0]-at[0],this.target[2]-at[2]):Math.atan2(this.viewer[0]-at[0],this.viewer[2]-at[2]);
+      this.renderer.place(index,at,angle,running);
+    });
+    this.renderer.render(dt);
   }
 
   _prepareDemoPlacement() {
-    this.markerGate?.reset();
     this.demoFrom = [0, -.03]; this.demoTarget = [0, -.03]; this.elapsed = 0; this.lastFrame = 0;
-    this.primary.hidden = false; this.primary.disabled = this.mode === 'camera'; this.primary.textContent = 'ここで決定';
+    this.primary.hidden = false; this.primary.disabled = false; this.primary.textContent = 'ここで決定';
 
-    this._state('placing', this.mode === 'camera' ? '2mほど先の床のマーカーを写してね' : '床を写してください');
+    this._state('placing', '床を写してください');
   }
 
   _placementSuccess() {
     if (!this.active || this.paused || !['placing', 'placed'].includes(this.phase)) return false;
-    if (this.mode === 'camera' && this.phase === 'placing' && !this.markerGate?.begin(performance.now())) return false;
+
     clearTimeout(this.placementTimer);
     this.primary.disabled = true;
     if (this.feedback) {
@@ -229,7 +293,7 @@ export class MorningExperience {
     const dt = this.lastFrame ? Math.min((time - this.lastFrame) / 1000, .1) : 0;
     this.lastFrame = time;
     if (this.paused) return;
-    if (this.mode === 'camera') { this._markerFrame(time, dt); return; }
+
     if (this.phase === 'chasing') {
       this.elapsed += dt;
       const segment = Math.floor(this.elapsed / LIMITS.demoTurnSeconds);
@@ -269,62 +333,9 @@ export class MorningExperience {
 
   }
 
-  _markerFrame(time, dt) {
-    if (['capturing','captured'].includes(this.phase)) return;
-    if (time - (this.markerFrameAt || 0) < 80) return;
-    this.markerFrameAt = time;
-    const video = this.video;
-    let sample = null;
-    if (video.readyState >= 2 && video.videoWidth) {
-      const ratio = Math.min(1, 1280 / Math.max(video.videoWidth,video.videoHeight));
-      const width = Math.round(video.videoWidth * ratio), height = Math.round(video.videoHeight * ratio);
-      if (this.markerCanvas.width !== width || this.markerCanvas.height !== height) {
-        this.markerCanvas.width = width; this.markerCanvas.height = height;
-        this.markerPosit = new markerLibrary.POS.Posit(.18, Math.max(width,height));
-        this.markerGate.reset();
-      }
-      this.markerContext.drawImage(video, 0, 0, width, height);
-      sample = readFloorMarker(this.markerDetector, this.markerPosit, this.markerContext.getImageData(0,0,width,height));
-    }
-    this.markerGate.update(sample, time);
-    const visible = Boolean(sample);
-    this.creatures.forEach(element=>{element.hidden=!visible;});
-    if (!visible) {
-      this.stage.classList.remove('is-capture-ready');
-      this.primary.disabled = true;
-      if (this.phase === 'capture-ready') this._state('chasing','床のマーカーをもう一度写してね');
-      else if (!this.markerGate.started) this._state('placing','2mほど先の床のマーカーを写してね');
-      return;
-    }
-    if (!this.markerGate.started && this.phase !== 'placed') {
-      this.primary.hidden = false;
-      this.primary.disabled = !this.markerGate.canBegin(time);
-      this._state('placing',this.primary.disabled?'少し離れて、マーカー全体を写してね':'ここから鶴を追いかけよう');
-    }
-    if (this.markerGate.started && this.phase === 'chasing' && this.markerGate.canCapture(time)) this._readyToCapture();
-    else if (this.phase === 'capture-ready' && !this.markerGate.canCapture(time)) {
-      this.stage.classList.remove('is-capture-ready');this._state('chasing','鶴のところまで歩いて近づこう');
-    }
-    // Project onto the same object-fit:cover crop as the live camera.
-    const sw=this.stage.clientWidth, sh=this.stage.clientHeight;
-    const cover=Math.max(sw/sample.width,sh/sample.height);
-    const cx=sample.centre.x*cover+(sw-sample.width*cover)/2;
-    const cy=sample.centre.y*cover+(sh-sample.height*cover)/2;
-    const scale=clamp(1.2/sample.range,.3,1.15);
-    const running=this.phase==='chasing';
-    const lateral=running?Math.sin(time/350)*14*scale:0;
-    this.creatures.forEach((element,index)=>{
-      element.style.left=`${cx+lateral+index*28*scale}px`;element.style.top=`${cy-35*scale}px`;
-      element.style.transform=`translate(-50%,-50%) scale(${scale})`;
-      element.setAttribute('role','button');element.setAttribute('aria-disabled',String(this.phase!=='capture-ready'));element.tabIndex=this.phase==='capture-ready'?0:-1;
-      element.setAttribute('aria-label','鶴をつかまえる');
-      this.views[index]?.play(running?'run':'idle');this.views[index]?.setHeading(running?Math.PI:.25);
-    });
-  }
-
   _tapTrackedAnimal(event) {
     // Camera capture is bound to each projected animal. No whole-screen capture target.
-    if (this.mode !== 'ar' || !this._isNear()) return;
+    if (this.mode === 'demo' || (this.mode === 'ar' && !this._isNear())) return;
     const r=this.canvas.getBoundingClientRect();
     if (this.renderer?.hitAnimal?.((event.clientX-r.left)/r.width*2-1,1-(event.clientY-r.top)/r.height*2)) this.capture();
   }
@@ -340,7 +351,7 @@ export class MorningExperience {
 
   _emote(role) {
     this.views?.forEach(view => view?.emote(role));
-    if (this.mode === 'ar') this.renderer?.emote(role);
+    if (this.mode !== 'demo') this.renderer?.emote(role);
   }
 
   advanceDemo() {
@@ -364,7 +375,7 @@ export class MorningExperience {
   capture() {
     if (this.captured || !this.active || this.paused || this.phase !== 'capture-ready') return false;
     if (this.mode === 'demo') return false;
-    if (this.mode === 'camera' && !this.markerGate?.canCapture(performance.now())) return false;
+    if (this.mode === 'camera' && !this.worldGate?.canCapture(performance.now())) return false;
     if (this.mode === 'ar' && (!this.trackingValid || !this._isNear() || this.dwell < LIMITS.dwellSeconds)) return false;
     this.captured = true;
     this.primary.disabled = true;
@@ -410,6 +421,7 @@ export class MorningExperience {
     if (this.master && this.audio) this.master.gain.setValueAtTime(this.muted ? 0 : 1.8, this.audio.currentTime);
     this.captured = false; this.elapsed = 0; this.dwell = 0; this.moves = 0; this.lastFrame = 0;
     this.creatures.forEach(element => element.classList.remove('is-surrendered'));
+    if (this.mode === 'camera') {this._resetWorldPlacement();return;}
     if (this.mode === 'ar') {
       this.origin = null; this.placement = null; this.initialViewer = null; this.target = null; this.savedPhase = null; this.trackingPhase = null;
       // Reset is a user gesture and must leave a paused XR session usable.
@@ -424,14 +436,13 @@ export class MorningExperience {
 
   _pause(message) {
     if (this.paused || !this.active) return;
-    this.markerGate?.reset();
     this.paused = true; this.savedPhase = this.mode === 'camera' ? 'placing' : this.phase === 'tracking-lost' ? this.trackingPhase || (this.origin ? 'chasing' : 'placing') : this.phase; this.lastFrame = 0; this.dwell = 0;
     if (['capture-ready', 'capturing'].includes(this.savedPhase)) this.savedPhase = 'surrendered';
     clearTimeout(this.placementTimer); clearTimeout(this.captureTimer); this.captured = false;
     if (this.feedback) this.feedback.hidden = true;
     this.stage?.classList?.remove('is-capture-ready', 'is-capturing');
     if (this.muteButton) this.muteButton.disabled = false;
-    if (this.mode === 'camera') this._releaseCamera();
+    if (this.mode === 'camera') {this.worldEngine?.pause();this._resetWorldPlacement();this.savedPhase='placing';}
     this.audio?.suspend().catch(() => {});
     this.primary.hidden = false; this.primary.disabled = false; this.primary.textContent = this.mode === 'camera' ? 'カメラを再開' : '続きを見る';
     this._state('tracking-lost', message);
@@ -444,16 +455,16 @@ export class MorningExperience {
     try {
       if (this.master && this.audio) this.master.gain.setValueAtTime(this.muted ? 0 : 1.8, this.audio.currentTime);
       this.audio?.resume().catch(() => {});
-      if (this.mode === 'camera') await this._startCamera(token);
+      if (this.mode === 'camera') {this.worldEngine?.XrController.recenter();this.worldEngine?.resume();}
       if (token !== this.token || !this.active) return;
       this.paused = false; this.lastFrame = 0; const phase = this.savedPhase || 'chasing';
       if (phase === 'surrendered') { this._surrender(); this._startAlarm(); }
       else if (phase === 'placed') { this._state('placed', '準備できた！'); this._placementSuccess(); }
-      else if (phase === 'placing') { if (this.mode === 'ar') this.reset(); else this._prepareDemoPlacement(); }
+      else if (phase === 'placing') { if (this.mode === 'ar') this.reset(); else if(this.mode==='camera')this._resetWorldPlacement();else this._prepareDemoPlacement(); }
       else { this.primary.hidden = this.mode === 'ar'; this.primary.disabled = true; this.primary.textContent = '追いかけっこ中'; this._state('chasing', '逃げた！追いかけよう'); }
     } catch (cause) {
       if (token !== this.token) return;
-      this._releaseCamera(); this.audio?.suspend().catch(() => {});
+      this.worldEngine?.pause(); this.audio?.suspend().catch(() => {});
       this.primary.disabled = false; const failure = this._friendlyError(cause); this._state('tracking-lost', failure.message); this.onError(failure);
     } finally { this.resuming = false; }
   }
@@ -488,25 +499,15 @@ export class MorningExperience {
     play(); this.alarmTimer = setInterval(play, 1800);
   }
 
-  _releaseCamera() {
-    const stream = this.stream; this.stream = null;
-    stream?.getTracks().forEach(track => track.stop());
-    if (this.video) { this.video.pause(); this.video.srcObject = null; }
-  }
-
-  async _exit() {
-    const mode = this.mode;
-    await this.stop(); this.onState({ phase: 'preparing', message: '体験を終了しました', mode, ended: true });
-  }
-
   async stop() {
     this.active = false; this.token++; this.resuming = false;
     clearTimeout(this.placementTimer); clearTimeout(this.captureTimer);
     this._cancelCameraStart?.();
     clearInterval(this.alarmTimer); cancelAnimationFrame(this.animationFrame);
     document.removeEventListener('visibilitychange', this._visibility); window.removeEventListener('pagehide', this._pagehide);
-    this._releaseCamera();
-    this.markerGate?.reset(); this.markerDetector = null; this.markerCanvas = null; this.markerContext = null;
+    this.cancelWorldStart?.();clearTimeout(this.worldStartTimer);this.worldResize?.disconnect();
+    if(this.worldEngine){this.worldEngine.stop();this.worldEngine.clearCameraPipelineModules();this.worldEngine=null;}
+    this.worldGate?.reset();
     const audio = this.audio; this.audio = null;
     this.master?.disconnect?.(); this.master = null; this.comp?.disconnect?.(); this.comp = null;
     if (audio && audio.state !== 'closed') { try { if(this.sharedAudio) await audio.suspend(); else await audio.close(); } catch { /* already released */ } }
@@ -660,2037 +661,42 @@ export class MorningExperience {
   }
 }
 
-// Pose distances are approximate: focal length uses the longer image side, not camera calibration.
-export function readFloorMarker(detector, posit, image) {
-  const {width,height}=image;
-  const marker=detector.detect(image).find(item=>item.id===0 && item.hammingDistance===0);
-  if(!marker)return null;
-  const corners=marker.corners.map(p=>({x:p.x-width/2,y:height/2-p.y}));
-  const pose=posit.pose(corners), t=pose.bestTranslation, r=pose.bestRotation;
-  const range=Math.hypot(...t);
-  const heightAboveFloor=Math.abs(t[0]*r[0][2]+t[1]*r[1][2]+t[2]*r[2][2]);
-  const distance=Math.sqrt(Math.max(0,range*range-heightAboveFloor*heightAboveFloor));
-  if(!Number.isFinite(distance)||pose.bestError>=5||range<=.3||range>=6||heightAboveFloor<=.25||heightAboveFloor>=2.2)return null;
-  const centre=marker.corners.reduce((sum,p)=>({x:sum.x+p.x/4,y:sum.y+p.y/4}),{x:0,y:0});
-  return {distance,range,centre,width,height};
-}
+const validPoint=p=>Boolean(p&&[p.x,p.y,p.z].every(Number.isFinite));
 
-// BEGIN MARKER APPROACH GATE
-export class MarkerApproachGate {
+// Shared production gate: elapsed chase time, turns and taps never substitute for translation.
+export class WorldApproachGate {
   constructor(){this.reset();}
-  reset(){this.started=false;this.initial=0;this.sample=null;this.last=0;this.farSince=null;this.nearSince=null;this.lostSince=null;}
-  update(sample, now){
-    if(!sample){this.sample=null;this.nearSince=null;this.farSince=null;if(this.lostSince===null)this.lostSince=now;if(now-this.lostSince>1500)this.reset();return;}
-    if(this.last && now-this.last>1500)this.reset();
-    // Reject an abrupt pose flip; reacquire instead of treating it as walking.
-    if(this.sample && now>this.last && Math.abs(sample.distance-this.sample.distance)>.2+(now-this.last)/1000*2.5){this.reset();return;}
-    this.lostSince=null;this.sample=sample;this.last=now;
-    if(sample.distance>=1.8&&sample.distance<=4){if(this.farSince===null)this.farSince=now;}else this.farSince=null;
-    const near=this.started&&sample.distance<=.65&&this.initial-sample.distance>=1.2;
-    if(near){if(this.nearSince===null)this.nearSince=now;}else this.nearSince=null;
+  reset(){this.initial=null;this.previous=null;this.last=0;this.near=false;this.nearSince=null;this.lostSince=null;}
+  begin(viewer){this.reset();this.initial=[...viewer];}
+  update(viewer,animal,now,tracking){
+    if(!tracking||!viewer||!animal||![...viewer,...animal].every(Number.isFinite)){
+      this.near=false;this.nearSince=null;
+      if(this.lostSince===null)this.lostSince=now;
+      if(now-this.lostSince>1500)this.reset();return;
+    }
+    if(this.previous && (now-this.last>1500 || distance(viewer,this.previous)>.25+Math.max(0,now-this.last)/1000*2.5)){this.reset();return;}
+    this.lostSince=null;this.last=now;this.previous=[...viewer];
+    this.near=!!this.initial&&planarDistance(viewer,this.initial)>=1.2&&planarDistance(viewer,animal)<=.65&&Math.abs(viewer[1]-animal[1])<=2.2;
+    if(this.near){if(this.nearSince===null)this.nearSince=now;}else this.nearSince=null;
   }
-  canBegin(now){return Boolean(this.sample&&now-this.last<250&&this.farSince!==null&&now-this.farSince>=600);}
-  begin(now){if(!this.canBegin(now))return false;this.started=true;this.initial=this.sample.distance;this.nearSince=null;return true;}
-  canCapture(now){return Boolean(this.started&&this.sample&&now-this.last<250&&this.nearSince!==null&&now-this.nearSince>=650);}
-}
-// END MARKER APPROACH GATE
-
-export function openMarkerPrint(){
-  const page=window.open('', '_blank');
-  if(!page)return false;
-  const svg=new markerLibrary.AR.Dictionary('ARUCO').generateSVG(0).replace('viewBox="0 0 9 9"','viewBox="0.65 0.65 7.7 7.7"');
-  page.document.write(`<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>折りGO 印刷用マーカー</title><style>@page{size:A4;margin:5mm}body{font-family:sans-serif;text-align:center;margin:0;color:#222;background:white}svg{width:198mm;height:198mm;max-width:100%;height:auto}h1{font-size:20px}p{font-size:16px;line-height:1.6}button{font-size:18px;padding:14px}@media print{button{display:none}svg{max-width:none}}</style><h1>折りGO・床に置くマーカー</h1><p>A4・倍率100%で印刷。黒い枠は一辺18cm。<br>白い余白を残して、明るい床に固定してください。</p>${svg}<button onclick="window.print()">印刷する</button></html>`);
-  page.document.close();return true;
+  canCapture(now){return !!this.initial&&this.near&&now-this.last<250&&this.nearSince!==null&&now-this.nearSince>=650;}
 }
 
-// js-aruco2 2.0.0 (MIT), vendored to keep camera frames entirely on device.
-const markerLibrary = (() => { const scope={}; (function(){
-/*
-Copyright (c) 2011 Juan Mellado
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
-
-/*
-References:
-- "OpenCV: Open Computer Vision Library"
-  http://sourceforge.net/projects/opencvlibrary/
-- "Stack Blur: Fast But Goodlooking"
-  http://incubator.quasimondo.com/processing/fast_blur_deluxe.php
-*/
-
-var CV = CV || {};
-this.CV = CV;
-
-CV.Image = function(width, height, data){
-  this.width = width || 0;
-  this.height = height || 0;
-  this.data = data || [];
-};
-
-CV.grayscale = function(imageSrc, imageDst){
-  var src = imageSrc.data, dst = imageDst.data, len = src.length,
-      i = 0, j = 0;
-
-  for (; i < len; i += 4){
-    dst[j ++] =
-      (src[i] * 0.299 + src[i + 1] * 0.587 + src[i + 2] * 0.114 + 0.5) & 0xff;
-  }
-
-  imageDst.width = imageSrc.width;
-  imageDst.height = imageSrc.height;
-
-  return imageDst;
-};
-
-CV.threshold = function(imageSrc, imageDst, threshold){
-  var src = imageSrc.data, dst = imageDst.data,
-      len = src.length, tab = [], i;
-
-  for (i = 0; i < 256; ++ i){
-    tab[i] = i <= threshold? 0: 255;
-  }
-
-  for (i = 0; i < len; ++ i){
-    dst[i] = tab[ src[i] ];
-  }
-
-  imageDst.width = imageSrc.width;
-  imageDst.height = imageSrc.height;
-
-  return imageDst;
-};
-
-CV.adaptiveThreshold = function(imageSrc, imageDst, kernelSize, threshold){
-  var src = imageSrc.data, dst = imageDst.data, len = src.length, tab = [], i;
-
-  CV.stackBoxBlur(imageSrc, imageDst, kernelSize);
-
-  for (i = 0; i < 768; ++ i){
-    tab[i] = (i - 255 <= -threshold)? 255: 0;
-  }
-
-  for (i = 0; i < len; ++ i){
-    dst[i] = tab[ src[i] - dst[i] + 255 ];
-  }
-
-  imageDst.width = imageSrc.width;
-  imageDst.height = imageSrc.height;
-
-  return imageDst;
-};
-
-CV.otsu = function(imageSrc){
-  var src = imageSrc.data, len = src.length, hist = [],
-      threshold = 0, sum = 0, sumB = 0, wB = 0, wF = 0, max = 0,
-      mu, between, i;
-
-  for (i = 0; i < 256; ++ i){
-    hist[i] = 0;
-  }
-
-  for (i = 0; i < len; ++ i){
-    hist[ src[i] ] ++;
-  }
-
-  for (i = 0; i < 256; ++ i){
-    sum += hist[i] * i;
-  }
-
-  for (i = 0; i < 256; ++ i){
-    wB += hist[i];
-    if (0 !== wB){
-
-      wF = len - wB;
-      if (0 === wF){
-        break;
-      }
-
-      sumB += hist[i] * i;
-
-      mu = (sumB / wB) - ( (sum - sumB) / wF );
-
-      between = wB * wF * mu * mu;
-
-      if (between > max){
-        max = between;
-        threshold = i;
-      }
-    }
-  }
-
-  return threshold;
-};
-
-CV.stackBoxBlurMult =
-  [1, 171, 205, 293, 57, 373, 79, 137, 241, 27, 391, 357, 41, 19, 283, 265];
-
-CV.stackBoxBlurShift =
-  [0, 9, 10, 11, 9, 12, 10, 11, 12, 9, 13, 13, 10, 9, 13, 13];
-
-CV.BlurStack = function(){
-  this.color = 0;
-  this.next = null;
-};
-
-CV.stackBoxBlur = function(imageSrc, imageDst, kernelSize){
-  var src = imageSrc.data, dst = imageDst.data,
-      height = imageSrc.height, width = imageSrc.width,
-      heightMinus1 = height - 1, widthMinus1 = width - 1,
-      size = kernelSize + kernelSize + 1, radius = kernelSize + 1,
-      mult = CV.stackBoxBlurMult[kernelSize],
-      shift = CV.stackBoxBlurShift[kernelSize],
-      stack, stackStart, color, sum, pos, start, p, x, y, i;
-
-  stack = stackStart = new CV.BlurStack();
-  for (i = 1; i < size; ++ i){
-    stack = stack.next = new CV.BlurStack();
-  }
-  stack.next = stackStart;
-
-  pos = 0;
-
-  for (y = 0; y < height; ++ y){
-    start = pos;
-
-    color = src[pos];
-    sum = radius * color;
-
-    stack = stackStart;
-    for (i = 0; i < radius; ++ i){
-      stack.color = color;
-      stack = stack.next;
-    }
-    for (i = 1; i < radius; ++ i){
-      stack.color = src[pos + i];
-      sum += stack.color;
-      stack = stack.next;
-    }
-
-    stack = stackStart;
-    for (x = 0; x < width; ++ x){
-      dst[pos ++] = (sum * mult) >>> shift;
-
-      p = x + radius;
-      p = start + (p < widthMinus1? p: widthMinus1);
-      sum -= stack.color - src[p];
-
-      stack.color = src[p];
-      stack = stack.next;
-    }
-  }
-
-  for (x = 0; x < width; ++ x){
-    pos = x;
-    start = pos + width;
-
-    color = dst[pos];
-    sum = radius * color;
-
-    stack = stackStart;
-    for (i = 0; i < radius; ++ i){
-      stack.color = color;
-      stack = stack.next;
-    }
-    for (i = 1; i < radius; ++ i){
-      stack.color = dst[start];
-      sum += stack.color;
-      stack = stack.next;
-
-      start += width;
-    }
-
-    stack = stackStart;
-    for (y = 0; y < height; ++ y){
-      dst[pos] = (sum * mult) >>> shift;
-
-      p = y + radius;
-      p = x + ( (p < heightMinus1? p: heightMinus1) * width );
-      sum -= stack.color - dst[p];
-
-      stack.color = dst[p];
-      stack = stack.next;
-
-      pos += width;
-    }
-  }
-
-  return imageDst;
-};
-
-CV.gaussianBlur = function(imageSrc, imageDst, imageMean, kernelSize){
-  var kernel = CV.gaussianKernel(kernelSize);
-
-  imageDst.width = imageSrc.width;
-  imageDst.height = imageSrc.height;
-
-  imageMean.width = imageSrc.width;
-  imageMean.height = imageSrc.height;
-
-  CV.gaussianBlurFilter(imageSrc, imageMean, kernel, true);
-  CV.gaussianBlurFilter(imageMean, imageDst, kernel, false);
-
-  return imageDst;
-};
-
-CV.gaussianBlurFilter = function(imageSrc, imageDst, kernel, horizontal){
-  var src = imageSrc.data, dst = imageDst.data,
-      height = imageSrc.height, width = imageSrc.width,
-      pos = 0, limit = kernel.length >> 1,
-      cur, value, i, j, k;
-
-  for (i = 0; i < height; ++ i){
-
-    for (j = 0; j < width; ++ j){
-      value = 0.0;
-
-      for (k = -limit; k <= limit; ++ k){
-
-        if (horizontal){
-          cur = pos + k;
-          if (j + k < 0){
-            cur = pos;
-          }
-          else if (j + k >= width){
-            cur = pos;
-          }
-        }else{
-          cur = pos + (k * width);
-          if (i + k < 0){
-            cur = pos;
-          }
-          else if (i + k >= height){
-            cur = pos;
-          }
-        }
-
-        value += kernel[limit + k] * src[cur];
-      }
-
-      dst[pos ++] = horizontal? value: (value + 0.5) & 0xff;
-    }
-  }
-
-  return imageDst;
-};
-
-CV.gaussianKernel = function(kernelSize){
-  var tab =
-    [ [1],
-      [0.25, 0.5, 0.25],
-      [0.0625, 0.25, 0.375, 0.25, 0.0625],
-      [0.03125, 0.109375, 0.21875, 0.28125, 0.21875, 0.109375, 0.03125] ],
-    kernel = [], center, sigma, scale2X, sum, x, i;
-
-  if ( (kernelSize <= 7) && (kernelSize % 2 === 1) ){
-    kernel = tab[kernelSize >> 1];
-  }else{
-    center = (kernelSize - 1.0) * 0.5;
-    sigma = 0.8 + (0.3 * (center - 1.0) );
-    scale2X = -0.5 / (sigma * sigma);
-    sum = 0.0;
-    for (i = 0; i < kernelSize; ++ i){
-      x = i - center;
-      sum += kernel[i] = Math.exp(scale2X * x * x);
-    }
-    sum = 1 / sum;
-    for (i = 0; i < kernelSize; ++ i){
-      kernel[i] *= sum;
-    }
-  }
-
-  return kernel;
-};
-
-CV.findContours = function(imageSrc, binary){
-  var width = imageSrc.width, height = imageSrc.height, contours = [],
-      src, deltas, pos, pix, nbd, outer, hole, i, j;
-
-  src = CV.binaryBorder(imageSrc, binary);
-
-  deltas = CV.neighborhoodDeltas(width + 2);
-
-  pos = width + 3;
-  nbd = 1;
-
-  for (i = 0; i < height; ++ i, pos += 2){
-
-    for (j = 0; j < width; ++ j, ++ pos){
-      pix = src[pos];
-
-      if (0 !== pix){
-        outer = hole = false;
-
-        if (1 === pix && 0 === src[pos - 1]){
-          outer = true;
-        }
-        else if (pix >= 1 && 0 === src[pos + 1]){
-          hole = true;
-        }
-
-        if (outer || hole){
-          ++ nbd;
-
-          contours.push( CV.borderFollowing(src, pos, nbd, {x: j, y: i}, hole, deltas) );
-        }
-      }
-    }
-  }
-
-  return contours;
-};
-
-CV.borderFollowing = function(src, pos, nbd, point, hole, deltas){
-  var contour = [], pos1, pos3, pos4, s, s_end, s_prev;
-
-  contour.hole = hole;
-
-  s = s_end = hole? 0: 4;
-  do{
-    s = (s - 1) & 7;
-    pos1 = pos + deltas[s];
-    if (src[pos1] !== 0){
-      break;
-    }
-  }while(s !== s_end);
-
-  if (s === s_end){
-    src[pos] = -nbd;
-    contour.push( {x: point.x, y: point.y} );
-
-  }else{
-    pos3 = pos;
-    s_prev = s ^ 4;
-
-    while(true){
-      s_end = s;
-
-      do{
-        pos4 = pos3 + deltas[++ s];
-      }while(src[pos4] === 0);
-
-      s &= 7;
-
-      if ( ( (s - 1) >>> 0) < (s_end >>> 0) ){
-        src[pos3] = -nbd;
-      }
-      else if (src[pos3] === 1){
-        src[pos3] = nbd;
-      }
-
-      contour.push( {x: point.x, y: point.y} );
-
-      s_prev = s;
-
-      point.x += CV.neighborhood[s][0];
-      point.y += CV.neighborhood[s][1];
-
-      if ( (pos4 === pos) && (pos3 === pos1) ){
-        break;
-      }
-
-      pos3 = pos4;
-      s = (s + 4) & 7;
-    }
-  }
-
-  return contour;
-};
-
-CV.neighborhood =
-  [ [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1] ];
-
-CV.neighborhoodDeltas = function(width){
-  var deltas = [], len = CV.neighborhood.length, i = 0;
-
-  for (; i < len; ++ i){
-    deltas[i] = CV.neighborhood[i][0] + (CV.neighborhood[i][1] * width);
-  }
-
-  return deltas.concat(deltas);
-};
-
-CV.approxPolyDP = function(contour, epsilon){
-  var slice = {start_index: 0, end_index: 0},
-      right_slice = {start_index: 0, end_index: 0},
-      poly = [], stack = [], len = contour.length,
-      pt, start_pt, end_pt, dist, max_dist, le_eps,
-      dx, dy, i, j, k;
-
-  epsilon *= epsilon;
-
-  k = 0;
-
-  for (i = 0; i < 3; ++ i){
-    max_dist = 0;
-
-    k = (k + right_slice.start_index) % len;
-    start_pt = contour[k];
-    if (++ k === len) {k = 0;}
-
-    for (j = 1; j < len; ++ j){
-      pt = contour[k];
-      if (++ k === len) {k = 0;}
-
-      dx = pt.x - start_pt.x;
-      dy = pt.y - start_pt.y;
-      dist = dx * dx + dy * dy;
-
-      if (dist > max_dist){
-        max_dist = dist;
-        right_slice.start_index = j;
-      }
-    }
-  }
-
-  if (max_dist <= epsilon){
-    poly.push( {x: start_pt.x, y: start_pt.y} );
-
-  }else{
-    slice.start_index = k;
-    slice.end_index = (right_slice.start_index += slice.start_index);
-
-    right_slice.start_index -= right_slice.start_index >= len? len: 0;
-    right_slice.end_index = slice.start_index;
-    if (right_slice.end_index < right_slice.start_index){
-      right_slice.end_index += len;
-    }
-
-    stack.push( {start_index: right_slice.start_index, end_index: right_slice.end_index} );
-    stack.push( {start_index: slice.start_index, end_index: slice.end_index} );
-  }
-
-  while(stack.length !== 0){
-    slice = stack.pop();
-
-    end_pt = contour[slice.end_index % len];
-    start_pt = contour[k = slice.start_index % len];
-    if (++ k === len) {k = 0;}
-
-    if (slice.end_index <= slice.start_index + 1){
-      le_eps = true;
-
-    }else{
-      max_dist = 0;
-
-      dx = end_pt.x - start_pt.x;
-      dy = end_pt.y - start_pt.y;
-
-      for (i = slice.start_index + 1; i < slice.end_index; ++ i){
-        pt = contour[k];
-        if (++ k === len) {k = 0;}
-
-        dist = Math.abs( (pt.y - start_pt.y) * dx - (pt.x - start_pt.x) * dy);
-
-        if (dist > max_dist){
-          max_dist = dist;
-          right_slice.start_index = i;
-        }
-      }
-
-      le_eps = max_dist * max_dist <= epsilon * (dx * dx + dy * dy);
-    }
-
-    if (le_eps){
-      poly.push( {x: start_pt.x, y: start_pt.y} );
-
-    }else{
-      right_slice.end_index = slice.end_index;
-      slice.end_index = right_slice.start_index;
-
-      stack.push( {start_index: right_slice.start_index, end_index: right_slice.end_index} );
-      stack.push( {start_index: slice.start_index, end_index: slice.end_index} );
-    }
-  }
-
-  return poly;
-};
-
-CV.warp = function(imageSrc, imageDst, contour, warpSize){
-  var src = imageSrc.data, dst = imageDst.data,
-      width = imageSrc.width, height = imageSrc.height,
-      pos = 0,
-      sx1, sx2, dx1, dx2, sy1, sy2, dy1, dy2, p1, p2, p3, p4,
-      m, r, s, t, u, v, w, x, y, i, j;
-
-  m = CV.getPerspectiveTransform(contour, warpSize - 1);
-
-  r = m[8];
-  s = m[2];
-  t = m[5];
-
-  for (i = 0; i < warpSize; ++ i){
-    r += m[7];
-    s += m[1];
-    t += m[4];
-
-    u = r;
-    v = s;
-    w = t;
-
-    for (j = 0; j < warpSize; ++ j){
-      u += m[6];
-      v += m[0];
-      w += m[3];
-
-      x = v / u;
-      y = w / u;
-
-      sx1 = x >>> 0;
-      sx2 = (sx1 === width - 1)? sx1: sx1 + 1;
-      dx1 = x - sx1;
-      dx2 = 1.0 - dx1;
-
-      sy1 = y >>> 0;
-      sy2 = (sy1 === height - 1)? sy1: sy1 + 1;
-      dy1 = y - sy1;
-      dy2 = 1.0 - dy1;
-
-      p1 = p2 = sy1 * width;
-      p3 = p4 = sy2 * width;
-
-      dst[pos ++] =
-        (dy2 * (dx2 * src[p1 + sx1] + dx1 * src[p2 + sx2]) +
-         dy1 * (dx2 * src[p3 + sx1] + dx1 * src[p4 + sx2]) ) & 0xff;
-
-    }
-  }
-
-  imageDst.width = warpSize;
-  imageDst.height = warpSize;
-
-  return imageDst;
-};
-
-CV.getPerspectiveTransform = function(src, size){
-  var rq = CV.square2quad(src);
-
-  rq[0] /= size;
-  rq[1] /= size;
-  rq[3] /= size;
-  rq[4] /= size;
-  rq[6] /= size;
-  rq[7] /= size;
-
-  return rq;
-};
-
-CV.square2quad = function(src){
-  var sq = [], px, py, dx1, dx2, dy1, dy2, den;
-
-  px = src[0].x - src[1].x + src[2].x - src[3].x;
-  py = src[0].y - src[1].y + src[2].y - src[3].y;
-
-  if (0 === px && 0 === py){
-    sq[0] = src[1].x - src[0].x;
-    sq[1] = src[2].x - src[1].x;
-    sq[2] = src[0].x;
-    sq[3] = src[1].y - src[0].y;
-    sq[4] = src[2].y - src[1].y;
-    sq[5] = src[0].y;
-    sq[6] = 0;
-    sq[7] = 0;
-    sq[8] = 1;
-
-  }else{
-    dx1 = src[1].x - src[2].x;
-    dx2 = src[3].x - src[2].x;
-    dy1 = src[1].y - src[2].y;
-    dy2 = src[3].y - src[2].y;
-    den = dx1 * dy2 - dx2 * dy1;
-
-    sq[6] = (px * dy2 - dx2 * py) / den;
-    sq[7] = (dx1 * py - px * dy1) / den;
-    sq[8] = 1;
-    sq[0] = src[1].x - src[0].x + sq[6] * src[1].x;
-    sq[1] = src[3].x - src[0].x + sq[7] * src[3].x;
-    sq[2] = src[0].x;
-    sq[3] = src[1].y - src[0].y + sq[6] * src[1].y;
-    sq[4] = src[3].y - src[0].y + sq[7] * src[3].y;
-    sq[5] = src[0].y;
-  }
-
-  return sq;
-};
-
-CV.isContourConvex = function(contour){
-  var orientation = 0, convex = true,
-      len = contour.length, i = 0, j = 0,
-      cur_pt, prev_pt, dxdy0, dydx0, dx0, dy0, dx, dy;
-
-  prev_pt = contour[len - 1];
-  cur_pt = contour[0];
-
-  dx0 = cur_pt.x - prev_pt.x;
-  dy0 = cur_pt.y - prev_pt.y;
-
-  for (; i < len; ++ i){
-    if (++ j === len) {j = 0;}
-
-    prev_pt = cur_pt;
-    cur_pt = contour[j];
-
-    dx = cur_pt.x - prev_pt.x;
-    dy = cur_pt.y - prev_pt.y;
-    dxdy0 = dx * dy0;
-    dydx0 = dy * dx0;
-
-    orientation |= dydx0 > dxdy0? 1: (dydx0 < dxdy0? 2: 3);
-
-    if (3 === orientation){
-        convex = false;
-        break;
-    }
-
-    dx0 = dx;
-    dy0 = dy;
-  }
-
-  return convex;
-};
-
-CV.perimeter = function(poly){
-  var len = poly.length, i = 0, j = len - 1,
-      p = 0.0, dx, dy;
-
-  for (; i < len; j = i ++){
-    dx = poly[i].x - poly[j].x;
-    dy = poly[i].y - poly[j].y;
-
-    p += Math.sqrt(dx * dx + dy * dy) ;
-  }
-
-  return p;
-};
-
-CV.minEdgeLength = function(poly){
-  var len = poly.length, i = 0, j = len - 1,
-      min = Infinity, d, dx, dy;
-
-  for (; i < len; j = i ++){
-    dx = poly[i].x - poly[j].x;
-    dy = poly[i].y - poly[j].y;
-
-    d = dx * dx + dy * dy;
-
-    if (d < min){
-      min = d;
-    }
-  }
-
-  return Math.sqrt(min);
-};
-
-CV.countNonZero = function(imageSrc, square){
-  var src = imageSrc.data, height = square.height, width = square.width,
-      pos = square.x + (square.y * imageSrc.width),
-      span = imageSrc.width - width,
-      nz = 0, i, j;
-
-  for (i = 0; i < height; ++ i){
-
-    for (j = 0; j < width; ++ j){
-
-      if ( 0 !== src[pos ++] ){
-        ++ nz;
-      }
-    }
-
-    pos += span;
-  }
-
-  return nz;
-};
-
-CV.binaryBorder = function(imageSrc, dst){
-  var src = imageSrc.data, height = imageSrc.height, width = imageSrc.width,
-      posSrc = 0, posDst = 0, i, j;
-
-  for (j = -2; j < width; ++ j){
-    dst[posDst ++] = 0;
-  }
-
-  for (i = 0; i < height; ++ i){
-    dst[posDst ++] = 0;
-
-    for (j = 0; j < width; ++ j){
-      dst[posDst ++] = (0 === src[posSrc ++]? 0: 1);
-    }
-
-    dst[posDst ++] = 0;
-  }
-
-  for (j = -2; j < width; ++ j){
-    dst[posDst ++] = 0;
-  }
-
-  return dst;
-};
-
-/*
-Copyright (c) 2020 Damiano Falcioni
-Copyright (c) 2011 Juan Mellado
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
-
-/*
-References:
-- "ArUco: a minimal library for Augmented Reality applications based on OpenCv"
-  http://www.uco.es/investiga/grupos/ava/node/26
-- "js-aruco: a port to JavaScript of the ArUco library"
-  https://github.com/jcmellado/js-aruco
-*/
-
-var AR = {};
-var CV = this.CV;
-this.AR = AR;
-
-AR.DICTIONARIES = {
-  ARUCO: {
-    nBits: 25,
-    tau: 3,
-    codeList: [0x1084210,0x1084217,0x1084209,0x108420e,0x10842f0,0x10842f7,0x10842e9,0x10842ee,0x1084130,0x1084137,0x1084129,0x108412e,0x10841d0,0x10841d7,0x10841c9,0x10841ce,0x1085e10,0x1085e17,0x1085e09,0x1085e0e,0x1085ef0,0x1085ef7,0x1085ee9,0x1085eee,0x1085d30,0x1085d37,0x1085d29,0x1085d2e,0x1085dd0,0x1085dd7,0x1085dc9,0x1085dce,0x1082610,0x1082617,0x1082609,0x108260e,0x10826f0,0x10826f7,0x10826e9,0x10826ee,0x1082530,0x1082537,0x1082529,0x108252e,0x10825d0,0x10825d7,0x10825c9,0x10825ce,0x1083a10,0x1083a17,0x1083a09,0x1083a0e,0x1083af0,0x1083af7,0x1083ae9,0x1083aee,0x1083930,0x1083937,0x1083929,0x108392e,0x10839d0,0x10839d7,0x10839c9,0x10839ce,0x10bc210,0x10bc217,0x10bc209,0x10bc20e,0x10bc2f0,0x10bc2f7,0x10bc2e9,0x10bc2ee,0x10bc130,0x10bc137,0x10bc129,0x10bc12e,0x10bc1d0,0x10bc1d7,0x10bc1c9,0x10bc1ce,0x10bde10,0x10bde17,0x10bde09,0x10bde0e,0x10bdef0,0x10bdef7,0x10bdee9,0x10bdeee,0x10bdd30,0x10bdd37,0x10bdd29,0x10bdd2e,0x10bddd0,0x10bddd7,0x10bddc9,0x10bddce,0x10ba610,0x10ba617,0x10ba609,0x10ba60e,0x10ba6f0,0x10ba6f7,0x10ba6e9,0x10ba6ee,0x10ba530,0x10ba537,0x10ba529,0x10ba52e,0x10ba5d0,0x10ba5d7,0x10ba5c9,0x10ba5ce,0x10bba10,0x10bba17,0x10bba09,0x10bba0e,0x10bbaf0,0x10bbaf7,0x10bbae9,0x10bbaee,0x10bb930,0x10bb937,0x10bb929,0x10bb92e,0x10bb9d0,0x10bb9d7,0x10bb9c9,0x10bb9ce,0x104c210,0x104c217,0x104c209,0x104c20e,0x104c2f0,0x104c2f7,0x104c2e9,0x104c2ee,0x104c130,0x104c137,0x104c129,0x104c12e,0x104c1d0,0x104c1d7,0x104c1c9,0x104c1ce,0x104de10,0x104de17,0x104de09,0x104de0e,0x104def0,0x104def7,0x104dee9,0x104deee,0x104dd30,0x104dd37,0x104dd29,0x104dd2e,0x104ddd0,0x104ddd7,0x104ddc9,0x104ddce,0x104a610,0x104a617,0x104a609,0x104a60e,0x104a6f0,0x104a6f7,0x104a6e9,0x104a6ee,0x104a530,0x104a537,0x104a529,0x104a52e,0x104a5d0,0x104a5d7,0x104a5c9,0x104a5ce,0x104ba10,0x104ba17,0x104ba09,0x104ba0e,0x104baf0,0x104baf7,0x104bae9,0x104baee,0x104b930,0x104b937,0x104b929,0x104b92e,0x104b9d0,0x104b9d7,0x104b9c9,0x104b9ce,0x1074210,0x1074217,0x1074209,0x107420e,0x10742f0,0x10742f7,0x10742e9,0x10742ee,0x1074130,0x1074137,0x1074129,0x107412e,0x10741d0,0x10741d7,0x10741c9,0x10741ce,0x1075e10,0x1075e17,0x1075e09,0x1075e0e,0x1075ef0,0x1075ef7,0x1075ee9,0x1075eee,0x1075d30,0x1075d37,0x1075d29,0x1075d2e,0x1075dd0,0x1075dd7,0x1075dc9,0x1075dce,0x1072610,0x1072617,0x1072609,0x107260e,0x10726f0,0x10726f7,0x10726e9,0x10726ee,0x1072530,0x1072537,0x1072529,0x107252e,0x10725d0,0x10725d7,0x10725c9,0x10725ce,0x1073a10,0x1073a17,0x1073a09,0x1073a0e,0x1073af0,0x1073af7,0x1073ae9,0x1073aee,0x1073930,0x1073937,0x1073929,0x107392e,0x10739d0,0x10739d7,0x10739c9,0x10739ce,0x1784210,0x1784217,0x1784209,0x178420e,0x17842f0,0x17842f7,0x17842e9,0x17842ee,0x1784130,0x1784137,0x1784129,0x178412e,0x17841d0,0x17841d7,0x17841c9,0x17841ce,0x1785e10,0x1785e17,0x1785e09,0x1785e0e,0x1785ef0,0x1785ef7,0x1785ee9,0x1785eee,0x1785d30,0x1785d37,0x1785d29,0x1785d2e,0x1785dd0,0x1785dd7,0x1785dc9,0x1785dce,0x1782610,0x1782617,0x1782609,0x178260e,0x17826f0,0x17826f7,0x17826e9,0x17826ee,0x1782530,0x1782537,0x1782529,0x178252e,0x17825d0,0x17825d7,0x17825c9,0x17825ce,0x1783a10,0x1783a17,0x1783a09,0x1783a0e,0x1783af0,0x1783af7,0x1783ae9,0x1783aee,0x1783930,0x1783937,0x1783929,0x178392e,0x17839d0,0x17839d7,0x17839c9,0x17839ce,0x17bc210,0x17bc217,0x17bc209,0x17bc20e,0x17bc2f0,0x17bc2f7,0x17bc2e9,0x17bc2ee,0x17bc130,0x17bc137,0x17bc129,0x17bc12e,0x17bc1d0,0x17bc1d7,0x17bc1c9,0x17bc1ce,0x17bde10,0x17bde17,0x17bde09,0x17bde0e,0x17bdef0,0x17bdef7,0x17bdee9,0x17bdeee,0x17bdd30,0x17bdd37,0x17bdd29,0x17bdd2e,0x17bddd0,0x17bddd7,0x17bddc9,0x17bddce,0x17ba610,0x17ba617,0x17ba609,0x17ba60e,0x17ba6f0,0x17ba6f7,0x17ba6e9,0x17ba6ee,0x17ba530,0x17ba537,0x17ba529,0x17ba52e,0x17ba5d0,0x17ba5d7,0x17ba5c9,0x17ba5ce,0x17bba10,0x17bba17,0x17bba09,0x17bba0e,0x17bbaf0,0x17bbaf7,0x17bbae9,0x17bbaee,0x17bb930,0x17bb937,0x17bb929,0x17bb92e,0x17bb9d0,0x17bb9d7,0x17bb9c9,0x17bb9ce,0x174c210,0x174c217,0x174c209,0x174c20e,0x174c2f0,0x174c2f7,0x174c2e9,0x174c2ee,0x174c130,0x174c137,0x174c129,0x174c12e,0x174c1d0,0x174c1d7,0x174c1c9,0x174c1ce,0x174de10,0x174de17,0x174de09,0x174de0e,0x174def0,0x174def7,0x174dee9,0x174deee,0x174dd30,0x174dd37,0x174dd29,0x174dd2e,0x174ddd0,0x174ddd7,0x174ddc9,0x174ddce,0x174a610,0x174a617,0x174a609,0x174a60e,0x174a6f0,0x174a6f7,0x174a6e9,0x174a6ee,0x174a530,0x174a537,0x174a529,0x174a52e,0x174a5d0,0x174a5d7,0x174a5c9,0x174a5ce,0x174ba10,0x174ba17,0x174ba09,0x174ba0e,0x174baf0,0x174baf7,0x174bae9,0x174baee,0x174b930,0x174b937,0x174b929,0x174b92e,0x174b9d0,0x174b9d7,0x174b9c9,0x174b9ce,0x1774210,0x1774217,0x1774209,0x177420e,0x17742f0,0x17742f7,0x17742e9,0x17742ee,0x1774130,0x1774137,0x1774129,0x177412e,0x17741d0,0x17741d7,0x17741c9,0x17741ce,0x1775e10,0x1775e17,0x1775e09,0x1775e0e,0x1775ef0,0x1775ef7,0x1775ee9,0x1775eee,0x1775d30,0x1775d37,0x1775d29,0x1775d2e,0x1775dd0,0x1775dd7,0x1775dc9,0x1775dce,0x1772610,0x1772617,0x1772609,0x177260e,0x17726f0,0x17726f7,0x17726e9,0x17726ee,0x1772530,0x1772537,0x1772529,0x177252e,0x17725d0,0x17725d7,0x17725c9,0x17725ce,0x1773a10,0x1773a17,0x1773a09,0x1773a0e,0x1773af0,0x1773af7,0x1773ae9,0x1773aee,0x1773930,0x1773937,0x1773929,0x177392e,0x17739d0,0x17739d7,0x17739c9,0x17739ce,0x984210,0x984217,0x984209,0x98420e,0x9842f0,0x9842f7,0x9842e9,0x9842ee,0x984130,0x984137,0x984129,0x98412e,0x9841d0,0x9841d7,0x9841c9,0x9841ce,0x985e10,0x985e17,0x985e09,0x985e0e,0x985ef0,0x985ef7,0x985ee9,0x985eee,0x985d30,0x985d37,0x985d29,0x985d2e,0x985dd0,0x985dd7,0x985dc9,0x985dce,0x982610,0x982617,0x982609,0x98260e,0x9826f0,0x9826f7,0x9826e9,0x9826ee,0x982530,0x982537,0x982529,0x98252e,0x9825d0,0x9825d7,0x9825c9,0x9825ce,0x983a10,0x983a17,0x983a09,0x983a0e,0x983af0,0x983af7,0x983ae9,0x983aee,0x983930,0x983937,0x983929,0x98392e,0x9839d0,0x9839d7,0x9839c9,0x9839ce,0x9bc210,0x9bc217,0x9bc209,0x9bc20e,0x9bc2f0,0x9bc2f7,0x9bc2e9,0x9bc2ee,0x9bc130,0x9bc137,0x9bc129,0x9bc12e,0x9bc1d0,0x9bc1d7,0x9bc1c9,0x9bc1ce,0x9bde10,0x9bde17,0x9bde09,0x9bde0e,0x9bdef0,0x9bdef7,0x9bdee9,0x9bdeee,0x9bdd30,0x9bdd37,0x9bdd29,0x9bdd2e,0x9bddd0,0x9bddd7,0x9bddc9,0x9bddce,0x9ba610,0x9ba617,0x9ba609,0x9ba60e,0x9ba6f0,0x9ba6f7,0x9ba6e9,0x9ba6ee,0x9ba530,0x9ba537,0x9ba529,0x9ba52e,0x9ba5d0,0x9ba5d7,0x9ba5c9,0x9ba5ce,0x9bba10,0x9bba17,0x9bba09,0x9bba0e,0x9bbaf0,0x9bbaf7,0x9bbae9,0x9bbaee,0x9bb930,0x9bb937,0x9bb929,0x9bb92e,0x9bb9d0,0x9bb9d7,0x9bb9c9,0x9bb9ce,0x94c210,0x94c217,0x94c209,0x94c20e,0x94c2f0,0x94c2f7,0x94c2e9,0x94c2ee,0x94c130,0x94c137,0x94c129,0x94c12e,0x94c1d0,0x94c1d7,0x94c1c9,0x94c1ce,0x94de10,0x94de17,0x94de09,0x94de0e,0x94def0,0x94def7,0x94dee9,0x94deee,0x94dd30,0x94dd37,0x94dd29,0x94dd2e,0x94ddd0,0x94ddd7,0x94ddc9,0x94ddce,0x94a610,0x94a617,0x94a609,0x94a60e,0x94a6f0,0x94a6f7,0x94a6e9,0x94a6ee,0x94a530,0x94a537,0x94a529,0x94a52e,0x94a5d0,0x94a5d7,0x94a5c9,0x94a5ce,0x94ba10,0x94ba17,0x94ba09,0x94ba0e,0x94baf0,0x94baf7,0x94bae9,0x94baee,0x94b930,0x94b937,0x94b929,0x94b92e,0x94b9d0,0x94b9d7,0x94b9c9,0x94b9ce,0x974210,0x974217,0x974209,0x97420e,0x9742f0,0x9742f7,0x9742e9,0x9742ee,0x974130,0x974137,0x974129,0x97412e,0x9741d0,0x9741d7,0x9741c9,0x9741ce,0x975e10,0x975e17,0x975e09,0x975e0e,0x975ef0,0x975ef7,0x975ee9,0x975eee,0x975d30,0x975d37,0x975d29,0x975d2e,0x975dd0,0x975dd7,0x975dc9,0x975dce,0x972610,0x972617,0x972609,0x97260e,0x9726f0,0x9726f7,0x9726e9,0x9726ee,0x972530,0x972537,0x972529,0x97252e,0x9725d0,0x9725d7,0x9725c9,0x9725ce,0x973a10,0x973a17,0x973a09,0x973a0e,0x973af0,0x973af7,0x973ae9,0x973aee,0x973930,0x973937,0x973929,0x97392e,0x9739d0,0x9739d7,0x9739c9,0x9739ce,0xe84210,0xe84217,0xe84209,0xe8420e,0xe842f0,0xe842f7,0xe842e9,0xe842ee,0xe84130,0xe84137,0xe84129,0xe8412e,0xe841d0,0xe841d7,0xe841c9,0xe841ce,0xe85e10,0xe85e17,0xe85e09,0xe85e0e,0xe85ef0,0xe85ef7,0xe85ee9,0xe85eee,0xe85d30,0xe85d37,0xe85d29,0xe85d2e,0xe85dd0,0xe85dd7,0xe85dc9,0xe85dce,0xe82610,0xe82617,0xe82609,0xe8260e,0xe826f0,0xe826f7,0xe826e9,0xe826ee,0xe82530,0xe82537,0xe82529,0xe8252e,0xe825d0,0xe825d7,0xe825c9,0xe825ce,0xe83a10,0xe83a17,0xe83a09,0xe83a0e,0xe83af0,0xe83af7,0xe83ae9,0xe83aee,0xe83930,0xe83937,0xe83929,0xe8392e,0xe839d0,0xe839d7,0xe839c9,0xe839ce,0xebc210,0xebc217,0xebc209,0xebc20e,0xebc2f0,0xebc2f7,0xebc2e9,0xebc2ee,0xebc130,0xebc137,0xebc129,0xebc12e,0xebc1d0,0xebc1d7,0xebc1c9,0xebc1ce,0xebde10,0xebde17,0xebde09,0xebde0e,0xebdef0,0xebdef7,0xebdee9,0xebdeee,0xebdd30,0xebdd37,0xebdd29,0xebdd2e,0xebddd0,0xebddd7,0xebddc9,0xebddce,0xeba610,0xeba617,0xeba609,0xeba60e,0xeba6f0,0xeba6f7,0xeba6e9,0xeba6ee,0xeba530,0xeba537,0xeba529,0xeba52e,0xeba5d0,0xeba5d7,0xeba5c9,0xeba5ce,0xebba10,0xebba17,0xebba09,0xebba0e,0xebbaf0,0xebbaf7,0xebbae9,0xebbaee,0xebb930,0xebb937,0xebb929,0xebb92e,0xebb9d0,0xebb9d7,0xebb9c9,0xebb9ce,0xe4c210,0xe4c217,0xe4c209,0xe4c20e,0xe4c2f0,0xe4c2f7,0xe4c2e9,0xe4c2ee,0xe4c130,0xe4c137,0xe4c129,0xe4c12e,0xe4c1d0,0xe4c1d7,0xe4c1c9,0xe4c1ce,0xe4de10,0xe4de17,0xe4de09,0xe4de0e,0xe4def0,0xe4def7,0xe4dee9,0xe4deee,0xe4dd30,0xe4dd37,0xe4dd29,0xe4dd2e,0xe4ddd0,0xe4ddd7,0xe4ddc9,0xe4ddce,0xe4a610,0xe4a617,0xe4a609,0xe4a60e,0xe4a6f0,0xe4a6f7,0xe4a6e9,0xe4a6ee,0xe4a530,0xe4a537,0xe4a529,0xe4a52e,0xe4a5d0,0xe4a5d7,0xe4a5c9,0xe4a5ce,0xe4ba10,0xe4ba17,0xe4ba09,0xe4ba0e,0xe4baf0,0xe4baf7,0xe4bae9,0xe4baee,0xe4b930,0xe4b937,0xe4b929,0xe4b92e,0xe4b9d0,0xe4b9d7,0xe4b9c9,0xe4b9ce,0xe74210,0xe74217,0xe74209,0xe7420e,0xe742f0,0xe742f7,0xe742e9,0xe742ee,0xe74130,0xe74137,0xe74129,0xe7412e,0xe741d0,0xe741d7,0xe741c9,0xe741ce,0xe75e10,0xe75e17,0xe75e09,0xe75e0e,0xe75ef0,0xe75ef7,0xe75ee9,0xe75eee,0xe75d30,0xe75d37,0xe75d29,0xe75d2e,0xe75dd0,0xe75dd7,0xe75dc9,0xe75dce,0xe72610,0xe72617,0xe72609,0xe7260e,0xe726f0,0xe726f7,0xe726e9,0xe726ee,0xe72530,0xe72537,0xe72529,0xe7252e,0xe725d0,0xe725d7,0xe725c9,0xe725ce,0xe73a10,0xe73a17,0xe73a09,0xe73a0e,0xe73af0,0xe73af7,0xe73ae9,0xe73aee,0xe73930,0xe73937,0xe73929,0xe7392e,0xe739d0,0xe739d7,0xe739c9]
-  },
-  ARUCO_MIP_36h12: {
-    nBits: 36,
-    tau: 12,
-    codeList: [0xd2b63a09d,0x6001134e5,0x1206fbe72,0xff8ad6cb4,0x85da9bc49,0xb461afe9c,0x6db51fe13,0x5248c541f,0x8f34503,0x8ea462ece,0xeac2be76d,0x1af615c44,0xb48a49f27,0x2e4e1283b,0x78b1f2fa8,0x27d34f57e,0x89222fff1,0x4c1669406,0xbf49b3511,0xdc191cd5d,0x11d7c3f85,0x16a130e35,0xe29f27eff,0x428d8ae0c,0x90d548477,0x2319cbc93,0xc3b0c3dfc,0x424bccc9,0x2a081d630,0x762743d96,0xd0645bf19,0xf38d7fd60,0xc6cbf9a10,0x3c1be7c65,0x276f75e63,0x4490a3f63,0xda60acd52,0x3cc68df59,0xab46f9dae,0x88d533d78,0xb6d62ec21,0xb3c02b646,0x22e56d408,0xac5f5770a,0xaaa993f66,0x4caa07c8d,0x5c9b4f7b0,0xaa9ef0e05,0x705c5750,0xac81f545e,0x735b91e74,0x8cc35cee4,0xe44694d04,0xb5e121de0,0x261017d0f,0xf1d439eb5,0xa1a33ac96,0x174c62c02,0x1ee27f716,0x8b1c5ece9,0x6a05b0c6a,0xd0568dfc,0x192d25e5f,0x1adbeccc8,0xcfec87f00,0xd0b9dde7a,0x88dcef81e,0x445681cb9,0xdbb2ffc83,0xa48d96df1,0xb72cc2e7d,0xc295b53f,0xf49832704,0x9968edc29,0x9e4e1af85,0x8683e2d1b,0x810b45c04,0x6ac44bfe2,0x645346615,0x3990bd598,0x1c9ed0f6a,0xc26729d65,0x83993f795,0x3ac05ac5d,0x357adff3b,0xd5c05565,0x2f547ef44,0x86c115041,0x640fd9e5f,0xce08bbcf7,0x109bb343e,0xc21435c92,0x35b4dfce4,0x459752cf2,0xec915b82c,0x51881eed0,0x2dda7dc97,0x2e0142144,0x42e890f99,0x9a8856527,0x8e80d9d80,0x891cbcf34,0x25dd82410,0x239551d34,0x8fe8f0c70,0x94106a970,0x82609b40c,0xfc9caf36,0x688181d11,0x718613c08,0xf1ab7629,0xa357bfc18,0x4c03b7a46,0x204dedce6,0xad6300d37,0x84cc4cd09,0x42160e5c4,0x87d2adfa8,0x7850e7749,0x4e750fc7c,0xbf2e5dfda,0xd88324da5,0x234b52f80,0x378204514,0xabdf2ad53,0x365e78ef9,0x49caa6ca2,0x3c39ddf3,0xc68c5385d,0x5bfcbbf67,0x623241e21,0xabc90d5cc,0x388c6fe85,0xda0e2d62d,0x10855dfe9,0x4d46efd6b,0x76ea12d61,0x9db377d3d,0xeed0efa71,0xe6ec3ae2f,0x441faee83,0xba19c8ff5,0x313035eab,0x6ce8f7625,0x880dab58d,0x8d3409e0d,0x2be92ee21,0xd60302c6c,0x469ffc724,0x87eebeed3,0x42587ef7a,0x7a8cc4e52,0x76a437650,0x999e41ef4,0x7d0969e42,0xc02baf46b,0x9259f3e47,0x2116a1dc0,0x9f2de4d84,0xeffac29,0x7b371ff8c,0x668339da9,0xd010aee3f,0x1cd00b4c0,0x95070fc3b,0xf84c9a770,0x38f863d76,0x3646ff045,0xce1b96412,0x7a5d45da8,0x14e00ef6c,0x5e95abfd8,0xb2e9cb729,0x36c47dd7,0xb8ee97c6b,0xe9e8f657,0xd4ad2ef1a,0x8811c7f32,0x47bde7c31,0x3adadfb64,0x6e5b28574,0x33e67cd91,0x2ab9fdd2d,0x8afa67f2b,0xe6a28fc5e,0x72049cdbd,0xae65dac12,0x1251a4526,0x1089ab841,0xe2f096ee0,0xb0caee573,0xfd6677e86,0x444b3f518,0xbe8b3a56a,0x680a75cfc,0xac02baea8,0x97d815e1c,0x1d4386e08,0x1a14f5b0e,0xe658a8d81,0xa3868efa7,0x3668a9673,0xe8fc53d85,0x2e2b7edd5,0x8b2470f13,0xf69795f32,0x4589ffc8e,0x2e2080c9c,0x64265f7d,0x3d714dd10,0x1692c6ef1,0x3e67f2f49,0x5041dad63,0x1a1503415,0x64c18c742,0xa72eec35,0x1f0f9dc60,0xa9559bc67,0xf32911d0d,0x21c0d4ffc,0xe01cef5b0,0x4e23a3520,0xaa4f04e49,0xe1c4fcc43,0x208e8f6e8,0x8486774a5,0x9e98c7558,0x2c59fb7dc,0x9446a4613,0x8292dcc2e,0x4d61631,0xd05527809,0xa0163852d,0x8f657f639,0xcca6c3e37,0xcb136bc7a,0xfc5a83e53,0x9aa44fc30,0xbdec1bd3c,0xe020b9f7c,0x4b8f35fb0,0xb8165f637,0x33dc88d69,0x10a2f7e4d,0xc8cb5ff53,0xde259ff6b,0x46d070dd4,0x32d3b9741,0x7075f1c04,0x4d58dbea0]
-  }
-};
-
-AR.Dictionary = function (dicName) {
-  this.codes = {};
-  this.codeList = [];
-  this.tau = 0;
-  this._initialize(dicName);
-};
-
-AR.Dictionary.prototype._initialize = function (dicName) {
-  this.codes = {};
-  this.codeList = [];
-  this.tau = 0;
-  this.nBits = 0;
-  this.markSize = 0;
-  this.dicName = dicName;
-  var dictionary = AR.DICTIONARIES[dicName];
-  if (!dictionary)
-    throw 'The dictionary "' + dicName + '" is not recognized.';
-
-  this.nBits = dictionary.nBits;
-  this.markSize = Math.sqrt(dictionary.nBits) + 2;
-  for (var i = 0; i < dictionary.codeList.length; i++) {
-    var code = null;
-    if (typeof dictionary.codeList[i] === 'number')
-      code = this._hex2bin(dictionary.codeList[i], dictionary.nBits);
-    if (typeof dictionary.codeList[i] === 'string')
-      code = this._hex2bin(parseInt(dictionary.codeList[i], 16), dictionary.nBits);
-    if (Array.isArray(dictionary.codeList[i]))
-      code = this._bytes2bin(dictionary.codeList[i], dictionary.nBits);
-    if (code === null)
-      throw 'Invalid code ' + i + ' in dictionary ' + dicName + ': ' + JSON.stringify(dictionary.codeList[i]);
-    if (code.length != dictionary.nBits)
-      throw 'The code ' + i + ' in dictionary ' + dicName + ' is not ' +  dictionary.nBits + ' bits long but ' + code.length + ': ' + code;
-    this.codeList.push(code);
-    this.codes[code] = {
-      id: i
-    };
-  }
-  this.tau = dictionary.tau || this._calculateTau();
-};
-
-AR.Dictionary.prototype.find = function (bits) {
-  var val = '',
-    i, j;
-  for (i = 0; i < bits.length; i++) {
-    var bitRow = bits[i];
-    for (j = 0; j < bitRow.length; j++) {
-      val += bitRow[j];
-    }
-  }
-  var minFound = this.codes[val];
-  if (minFound)
-    return {
-      id: minFound.id,
-      distance: 0
-    };
-
-  for (i = 0; i < this.codeList.length; i++) {
-    var code = this.codeList[i];
-    var distance = this._hammingDistance(val, code);
-    if (this._hammingDistance(val, code) < this.tau) {
-      if (!minFound || minFound.distance > distance) {
-        minFound = {
-          id: this.codes[code].id,
-          distance: distance
-        };
-      }
-    }
-  }
-  return minFound;
-};
-
-AR.Dictionary.prototype._hex2bin = function (hex, nBits) {
-  return hex.toString(2).padStart(nBits, '0');
-};
-
-AR.Dictionary.prototype._bytes2bin = function (byteList, nBits) {
-  var bits = '', byte;
-  for (byte of byteList) {
-    bits += byte.toString(2).padStart(bits.length + 8 > nBits?nBits - bits.length:8, '0');
-  }
-  return bits;
-};
-
-AR.Dictionary.prototype._hammingDistance = function (str1, str2) {
-  if (str1.length != str2.length)
-    throw 'Hamming distance calculation require inputs of the same length';
-  var distance = 0,
-    i;
-  for (i = 0; i < str1.length; i++)
-    if (str1[i] !== str2[i])
-      distance += 1;
-  return distance;
-};
-
-AR.Dictionary.prototype._calculateTau = function () {
-  var tau = Number.MAX_VALUE;
-  for(var i=0;i<this.codeList.length;i++)
-    for(var j=i+1;j<this.codeList.length;j++) {
-      var distance = this._hammingDistance(this.codeList[i], this.codeList[j]);
-      tau = distance < tau ? distance : tau;
-    }
-  return tau;
-};
-
-AR.Dictionary.prototype.generateSVG = function (id) {
-  var code = this.codeList[id];
-  if (code == null)
-    throw 'The id "' + id + '" is not valid for the dictionary "' + this.dicName + '". ID must be between 0 and ' + (this.codeList.length-1) + ' included.';
-  var size = this.markSize - 2;
-  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+ (size+4) + ' ' + (size+4) + '">';
-  svg += '<rect x="0" y="0" width="' + (size+4) + '" height="' + (size+4) + '" fill="white"/>';
-  svg += '<rect x="1" y="1" width="' + (size+2) + '" height="' + (size+2) + '" fill="black"/>';
-  for(var y=0;y<size;y++) {
-    for(var x=0;x<size;x++) {
-      if (code[y*size+x]=='1')
-        svg += '<rect x="' + (x+2) + '" y="' + (y+2) + '" width="1" height="1" fill="white"/>';
-    }
-  }
-  svg += '</svg>';
-  return svg;
-};
-
-AR.Marker = function (id, corners, hammingDistance) {
-  this.id = id;
-  this.corners = corners;
-  this.hammingDistance = hammingDistance;
-};
-
-AR.Detector = function (config) {
-  config = config || {};
-  this.grey = new CV.Image();
-  this.thres = new CV.Image();
-  this.homography = new CV.Image();
-  this.binary = [];
-  this.contours = [];
-  this.polys = [];
-  this.candidates = [];
-  config.dictionaryName = config.dictionaryName || 'ARUCO_MIP_36h12';
-  this.dictionary = new AR.Dictionary(config.dictionaryName);
-  this.dictionary.tau = config.maxHammingDistance != null ? config.maxHammingDistance : this.dictionary.tau;
-};
-
-AR.Detector.prototype.detectImage = function (width, height, data) {
-  return this.detect({
-    width: width,
-    height: height,
-    data: data
+let worldEnginePromise;
+export function loadWorldEngine() {
+  if(window.XR8)return Promise.resolve(window.XR8);
+  if(worldEnginePromise)return worldEnginePromise;
+  worldEnginePromise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    // Unmodified 8th Wall engine, including its embedded copyright/license notice.
+    // License: https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1.0.0/LICENSE
+    script.src='https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1.0.0/dist/xr.js';
+    script.async=true;script.crossOrigin='anonymous';script.dataset.preloadChunks='slam';
+    const cleanup=()=>{clearTimeout(timer);window.removeEventListener('xrloaded',loaded);};
+    const fail=()=>{cleanup();script.remove();worldEnginePromise=null;reject(error('world-load','ARを読み込めなかったよ。通信を確認して、もう一度ためしてね。'));};
+    const loaded=()=>{if(window.XR8){cleanup();resolve(window.XR8);}};
+    const timer=setTimeout(fail,30000);script.onerror=fail;script.onload=loaded;
+    window.addEventListener('xrloaded',loaded);document.head.append(script);
   });
-};
-
-AR.Detector.prototype.detectStreamInit = function (width, height, callback) {
-  this.streamConfig = {};
-  this.streamConfig.width = width;
-  this.streamConfig.height = height;
-  this.streamConfig.imageSize = width * height * 4; //provided image must be a sequence of rgba bytes (4 bytes represent a pixel)
-  this.streamConfig.index = 0;
-  this.streamConfig.imageData = new Uint8ClampedArray(this.streamConfig.imageSize);
-  this.streamConfig.callback = callback || function (image, markerList) {};
-};
-
-//accept data chunks of different sizes
-AR.Detector.prototype.detectStream = function (data) {
-  for (var i = 0; i < data.length; i++) {
-    this.streamConfig.imageData[this.streamConfig.index] = data[i];
-    this.streamConfig.index = (this.streamConfig.index + 1) % this.streamConfig.imageSize;
-    if (this.streamConfig.index == 0) {
-      var image = {
-        width: this.streamConfig.width,
-        height: this.streamConfig.height,
-        data: this.streamConfig.imageData
-      };
-      var markerList = this.detect(image);
-      this.streamConfig.callback(image, markerList);
-    }
-  }
-};
-
-AR.Detector.prototype.detectMJPEGStreamInit = function (width, height, callback, decoderFn) {
-  this.mjpeg = {
-    decoderFn: decoderFn,
-    chunks: [],
-    SOI: [0xff, 0xd8],
-    EOI: [0xff, 0xd9]
-  };
-  this.detectStreamInit(width, height, callback);
-};
-
-AR.Detector.prototype.detectMJPEGStream = function (chunk) {
-  var eoiPos = chunk.findIndex(function (element, index, array) {
-    return this.mjpeg.EOI[0] == element && array.length > index + 1 && this.mjpeg.EOI[1] == array[index + 1];
-  });
-  var soiPos = chunk.findIndex(function (element, index, array) {
-    return this.mjpeg.SOI[0] == element && array.length > index + 1 && this.mjpeg.SOI[1] == array[index + 1];
-  });
-
-  if (eoiPos === -1) {
-    this.mjpeg.chunks.push(chunk);
-  } else {
-    var part1 = chunk.slice(0, eoiPos + 2);
-    if (part1.length) {
-      this.mjpeg.chunks.push(part1);
-    }
-    if (this.mjpeg.chunks.length) {
-      var jpegImage = this.mjpeg.chunks.flat();
-      var rgba = this.mjpeg.decoderFn(jpegImage);
-      this.detectStream(rgba);
-    }
-    this.mjpeg.chunks = [];
-  }
-  if (soiPos > -1) {
-    this.mjpeg.chunks = [];
-    this.mjpeg.chunks.push(chunk.slice(soiPos));
-  }
-};
-
-AR.Detector.prototype.detect = function (image) {
-  CV.grayscale(image, this.grey);
-  CV.adaptiveThreshold(this.grey, this.thres, 2, 7);
-
-  this.contours = CV.findContours(this.thres, this.binary);
-  //Scale Fix: https://stackoverflow.com/questions/35936397/marker-detection-on-paper-sheet-using-javascript
-  //this.candidates = this.findCandidates(this.contours, image.width * 0.20, 0.05, 10);
-  this.candidates = this.findCandidates(this.contours, image.width * 0.01, 0.05, 10);
-  this.candidates = this.clockwiseCorners(this.candidates);
-  this.candidates = this.notTooNear(this.candidates, 10);
-
-  return this.findMarkers(this.grey, this.candidates, 49);
-};
-
-AR.Detector.prototype.findCandidates = function (contours, minSize, epsilon, minLength) {
-  var candidates = [],
-    len = contours.length,
-    contour, poly, i;
-
-  this.polys = [];
-
-  for (i = 0; i < len; ++i) {
-    contour = contours[i];
-
-    if (contour.length >= minSize) {
-      poly = CV.approxPolyDP(contour, contour.length * epsilon);
-
-      this.polys.push(poly);
-
-      if ((4 === poly.length) && (CV.isContourConvex(poly))) {
-
-        if (CV.minEdgeLength(poly) >= minLength) {
-          candidates.push(poly);
-        }
-      }
-    }
-  }
-
-  return candidates;
-};
-
-AR.Detector.prototype.clockwiseCorners = function (candidates) {
-  var len = candidates.length,
-    dx1, dx2, dy1, dy2, swap, i;
-
-  for (i = 0; i < len; ++i) {
-    dx1 = candidates[i][1].x - candidates[i][0].x;
-    dy1 = candidates[i][1].y - candidates[i][0].y;
-    dx2 = candidates[i][2].x - candidates[i][0].x;
-    dy2 = candidates[i][2].y - candidates[i][0].y;
-
-    if ((dx1 * dy2 - dy1 * dx2) < 0) {
-      swap = candidates[i][1];
-      candidates[i][1] = candidates[i][3];
-      candidates[i][3] = swap;
-    }
-  }
-
-  return candidates;
-};
-
-AR.Detector.prototype.notTooNear = function (candidates, minDist) {
-  var notTooNear = [],
-    len = candidates.length,
-    dist, dx, dy, i, j, k;
-
-  for (i = 0; i < len; ++i) {
-
-    for (j = i + 1; j < len; ++j) {
-      dist = 0;
-
-      for (k = 0; k < 4; ++k) {
-        dx = candidates[i][k].x - candidates[j][k].x;
-        dy = candidates[i][k].y - candidates[j][k].y;
-
-        dist += dx * dx + dy * dy;
-      }
-
-      if ((dist / 4) < (minDist * minDist)) {
-
-        if (CV.perimeter(candidates[i]) < CV.perimeter(candidates[j])) {
-          candidates[i].tooNear = true;
-        } else {
-          candidates[j].tooNear = true;
-        }
-      }
-    }
-  }
-
-  for (i = 0; i < len; ++i) {
-    if (!candidates[i].tooNear) {
-      notTooNear.push(candidates[i]);
-    }
-  }
-
-  return notTooNear;
-};
-
-AR.Detector.prototype.findMarkers = function (imageSrc, candidates, warpSize) {
-  var markers = [],
-    len = candidates.length,
-    candidate, marker, i;
-
-  for (i = 0; i < len; ++i) {
-    candidate = candidates[i];
-
-    CV.warp(imageSrc, this.homography, candidate, warpSize);
-
-    CV.threshold(this.homography, this.homography, CV.otsu(this.homography));
-
-    marker = this.getMarker(this.homography, candidate);
-    if (marker) {
-      markers.push(marker);
-    }
-  }
-
-  return markers;
-};
-
-AR.Detector.prototype.getMarker = function (imageSrc, candidate) {
-  var markSize = this.dictionary.markSize;
-  var width = (imageSrc.width / markSize) >>> 0,
-    minZero = (width * width) >> 1,
-    bits = [],
-    rotations = [],
-    square, inc, i, j;
-
-  for (i = 0; i < markSize; ++i) {
-    inc = (0 === i || (markSize - 1) === i) ? 1 : (markSize - 1);
-
-    for (j = 0; j < markSize; j += inc) {
-      square = {
-        x: j * width,
-        y: i * width,
-        width: width,
-        height: width
-      };
-      if (CV.countNonZero(imageSrc, square) > minZero) {
-        return null;
-      }
-    }
-  }
-
-  for (i = 0; i < markSize - 2; ++i) {
-    bits[i] = [];
-
-    for (j = 0; j < markSize - 2; ++j) {
-      square = {
-        x: (j + 1) * width,
-        y: (i + 1) * width,
-        width: width,
-        height: width
-      };
-
-      bits[i][j] = CV.countNonZero(imageSrc, square) > minZero ? 1 : 0;
-    }
-  }
-
-  rotations[0] = bits;
-
-  var foundMin = null;
-  var rot = 0;
-  for (i = 0; i < 4; i++) {
-    var found = this.dictionary.find(rotations[i]);
-    if (found && (foundMin === null || found.distance < foundMin.distance)) {
-      foundMin = found;
-      rot = i;
-      if (foundMin.distance === 0)
-        break;
-    }
-    rotations[i + 1] = this.rotate(rotations[i]);
-  }
-
-  if (foundMin)
-    return new AR.Marker(foundMin.id, this.rotate2(candidate, 4 - rot), foundMin.distance);
-
-  return null;
-};
-
-AR.Detector.prototype.rotate = function (src) {
-  var dst = [],
-    len = src.length,
-    i, j;
-
-  for (i = 0; i < len; ++i) {
-    dst[i] = [];
-    for (j = 0; j < src[i].length; ++j) {
-      dst[i][j] = src[src[i].length - j - 1][i];
-    }
-  }
-
-  return dst;
-};
-
-AR.Detector.prototype.rotate2 = function (src, rotation) {
-  var dst = [],
-    len = src.length,
-    i;
-
-  for (i = 0; i < len; ++i) {
-    dst[i] = src[(rotation + i) % len];
-  }
-
-  return dst;
-};
-
-/*
-Copyright (c) 2012 Juan Mellado
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
-
-/*
-References:
-- "Numerical Recipes in C - Second Edition"
-  http://www.nr.com/
-*/
-
-var SVD = SVD || {};
-this.SVD = SVD;
-
-SVD.svdcmp = function(a, m, n, w, v){
-  var flag, i, its, j, jj, k, l, nm,
-      anorm = 0.0, c, f, g = 0.0, h, s, scale = 0.0, x, y, z, rv1 = [];
-
-  //Householder reduction to bidiagonal form
-  for (i = 0; i < n; ++ i){
-    l = i + 1;
-    rv1[i] = scale * g;
-    g = s = scale = 0.0;
-    if (i < m){
-      for (k = i; k < m; ++ k){
-        scale += Math.abs( a[k][i] );
-      }
-      if (0.0 !== scale){
-        for (k = i; k < m; ++ k){
-          a[k][i] /= scale;
-          s += a[k][i] * a[k][i];
-        }
-        f = a[i][i];
-        g = -SVD.sign( Math.sqrt(s), f );
-        h = f * g - s;
-        a[i][i] = f - g;
-        for (j = l; j < n; ++ j){
-          for (s = 0.0, k = i; k < m; ++ k){
-            s += a[k][i] * a[k][j];
-          }
-          f = s / h;
-          for (k = i; k < m; ++ k){
-            a[k][j] += f * a[k][i];
-          }
-        }
-        for (k = i; k < m; ++ k){
-          a[k][i] *= scale;
-        }
-      }
-    }
-    w[i] = scale * g;
-    g = s = scale = 0.0;
-    if ( (i < m) && (i !== n - 1) ){
-      for (k = l; k < n; ++ k){
-        scale += Math.abs( a[i][k] );
-      }
-      if (0.0 !== scale){
-        for (k = l; k < n; ++ k){
-          a[i][k] /= scale;
-          s += a[i][k] * a[i][k];
-        }
-        f = a[i][l];
-        g = -SVD.sign( Math.sqrt(s), f );
-        h = f * g - s;
-        a[i][l] = f - g;
-        for (k = l; k < n; ++ k){
-          rv1[k] = a[i][k] / h;
-        }
-        for (j = l; j < m; ++ j){
-          for (s = 0.0, k = l; k < n; ++ k){
-            s += a[j][k] * a[i][k];
-          }
-          for (k = l; k < n; ++ k){
-            a[j][k] += s * rv1[k];
-          }
-        }
-        for (k = l; k < n; ++ k){
-          a[i][k] *= scale;
-        }
-      }
-    }
-    anorm = Math.max(anorm, ( Math.abs( w[i] ) + Math.abs( rv1[i] ) ) );
-  }
-
-  //Acumulation of right-hand transformation
-  for (i = n - 1; i >= 0; -- i){
-    if (i < n - 1){
-      if (0.0 !== g){
-        for (j = l; j < n; ++ j){
-          v[j][i] = ( a[i][j] / a[i][l] ) / g;
-        }
-        for (j = l; j < n; ++ j){
-          for (s = 0.0, k = l; k < n; ++ k){
-            s += a[i][k] * v[k][j];
-          }
-          for (k = l; k < n; ++ k){
-            v[k][j] += s * v[k][i];
-          }
-        }
-      }
-      for (j = l; j < n; ++ j){
-        v[i][j] = v[j][i] = 0.0;
-      }
-    }
-    v[i][i] = 1.0;
-    g = rv1[i];
-    l = i;
-  }
-
-  //Acumulation of left-hand transformation
-  for (i = Math.min(n, m) - 1; i >= 0; -- i){
-    l = i + 1;
-    g = w[i];
-    for (j = l; j < n; ++ j){
-      a[i][j] = 0.0;
-    }
-    if (0.0 !== g){
-      g = 1.0 / g;
-      for (j = l; j < n; ++ j){
-        for (s = 0.0, k = l; k < m; ++ k){
-          s += a[k][i] * a[k][j];
-        }
-        f = (s / a[i][i]) * g;
-        for (k = i; k < m; ++ k){
-          a[k][j] += f * a[k][i];
-        }
-      }
-      for (j = i; j < m; ++ j){
-        a[j][i] *= g;
-      }
-    }else{
-        for (j = i; j < m; ++ j){
-          a[j][i] = 0.0;
-        }
-    }
-    ++ a[i][i];
-  }
-
-  //Diagonalization of the bidiagonal form
-  for (k = n - 1; k >= 0; -- k){
-    for (its = 1; its <= 30; ++ its){
-      flag = true;
-      for (l = k; l >= 0; -- l){
-        nm = l - 1;
-        if ( Math.abs( rv1[l] ) + anorm === anorm ){
-          flag = false;
-          break;
-        }
-        if ( Math.abs( w[nm] ) + anorm === anorm ){
-          break;
-        }
-      }
-      if (flag){
-        c = 0.0;
-        s = 1.0;
-        for (i = l; i <= k; ++ i){
-          f = s * rv1[i];
-          if ( Math.abs(f) + anorm === anorm ){
-            break;
-          }
-          g = w[i];
-          h = SVD.pythag(f, g);
-          w[i] = h;
-          h = 1.0 / h;
-          c = g * h;
-          s = -f * h;
-          for (j = 1; j <= m; ++ j){
-            y = a[j][nm];
-            z = a[j][i];
-            a[j][nm] = y * c + z * s;
-            a[j][i] = z * c - y * s;
-          }
-        }
-      }
-
-      //Convergence
-      z = w[k];
-      if (l === k){
-        if (z < 0.0){
-          w[k] = -z;
-          for (j = 0; j < n; ++ j){
-            v[j][k] = -v[j][k];
-          }
-        }
-        break;
-      }
-
-      if (30 === its){
-        return false;
-      }
-
-      //Shift from bottom 2-by-2 minor
-      x = w[l];
-      nm = k - 1;
-      y = w[nm];
-      g = rv1[nm];
-      h = rv1[k];
-      f = ( (y - z) * (y + z) + (g - h) * (g + h) ) / (2.0 * h * y);
-      g = SVD.pythag( f, 1.0 );
-      f = ( (x - z) * (x + z) + h * ( (y / (f + SVD.sign(g, f) ) ) - h) ) / x;
-
-      //Next QR transformation
-      c = s = 1.0;
-      for (j = l; j <= nm; ++ j){
-        i = j + 1;
-        g = rv1[i];
-        y = w[i];
-        h = s * g;
-        g = c * g;
-        z = SVD.pythag(f, h);
-        rv1[j] = z;
-        c = f / z;
-        s = h / z;
-        f = x * c + g * s;
-        g = g * c - x * s;
-        h = y * s;
-        y *= c;
-        for (jj = 0; jj < n; ++ jj){
-          x = v[jj][j];
-          z = v[jj][i];
-          v[jj][j] = x * c + z * s;
-          v[jj][i] = z * c - x * s;
-        }
-        z = SVD.pythag(f, h);
-        w[j] = z;
-        if (0.0 !== z){
-          z = 1.0 / z;
-          c = f * z;
-          s = h * z;
-        }
-        f = c * g + s * y;
-        x = c * y - s * g;
-        for (jj = 0; jj < m; ++ jj){
-          y = a[jj][j];
-          z = a[jj][i];
-          a[jj][j] = y * c + z * s;
-          a[jj][i] = z * c - y * s;
-        }
-      }
-      rv1[l] = 0.0;
-      rv1[k] = f;
-      w[k] = x;
-    }
-  }
-
-  return true;
-};
-
-SVD.pythag = function(a, b){
-  var at = Math.abs(a), bt = Math.abs(b), ct;
-
-  if (at > bt){
-    ct = bt / at;
-    return at * Math.sqrt(1.0 + ct * ct);
-  }
-
-  if (0.0 === bt){
-    return 0.0;
-  }
-
-  ct = at / bt;
-  return bt * Math.sqrt(1.0 + ct * ct);
-};
-
-SVD.sign = function(a, b){
-  return b >= 0.0? Math.abs(a): -Math.abs(a);
-};
-
-/*
-Copyright (c) 2012 Juan Mellado
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
-
-/*
-References:
-- "Iterative Pose Estimation using Coplanar Feature Points"
-  Denis Oberkampf, Daniel F. DeMenthon, Larry S. Davis
-  http://www.cfar.umd.edu/~daniel/daniel_papersfordownload/CoplanarPts.pdf
-*/
-
-var POS = POS || {};
-this.POS = POS;
-
-var SVD = this.SVD;
-
-POS.Posit = function(modelSize, focalLength){
-  this.objectPoints = this.buildModel(modelSize);
-  this.focalLength = focalLength;
-
-  this.objectVectors = [];
-  this.objectNormal = [];
-  this.objectMatrix = [[],[],[]];
-
-  this.init();
-};
-
-POS.Posit.prototype.buildModel = function(modelSize){
-  var half = modelSize / 2.0;
-
-  return [
-    [-half,  half, 0.0],
-    [ half,  half, 0.0],
-    [ half, -half, 0.0],
-    [-half, -half, 0.0] ];
-};
-
-POS.Posit.prototype.init = function(){
-  var np = this.objectPoints.length,
-      vectors = [], n = [], len = 0.0, row = 2, i;
-
-  for (i = 0; i < np; ++ i){
-    this.objectVectors[i] = [this.objectPoints[i][0] - this.objectPoints[0][0],
-                             this.objectPoints[i][1] - this.objectPoints[0][1],
-                             this.objectPoints[i][2] - this.objectPoints[0][2]];
-
-    vectors[i] = [this.objectVectors[i][0],
-                  this.objectVectors[i][1],
-                  this.objectVectors[i][2]];
-  }
-
-  while(0.0 === len){
-    n[0] = this.objectVectors[1][1] * this.objectVectors[row][2] -
-           this.objectVectors[1][2] * this.objectVectors[row][1];
-    n[1] = this.objectVectors[1][2] * this.objectVectors[row][0] -
-           this.objectVectors[1][0] * this.objectVectors[row][2];
-    n[2] = this.objectVectors[1][0] * this.objectVectors[row][1] -
-           this.objectVectors[1][1] * this.objectVectors[row][0];
-
-    len = Math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-
-    ++ row;
-  }
-
-  for (i = 0; i < 3; ++ i){
-    this.objectNormal[i] = n[i] / len;
-  }
-
-  POS.pseudoInverse(vectors, np, this.objectMatrix);
-};
-
-POS.Posit.prototype.pose = function(imagePoints){
-  var posRotation1 = [[],[],[]], posRotation2 = [[],[],[]], posTranslation = [],
-      rotation1 = [[],[],[]], rotation2 = [[],[],[]], translation1 = [], translation2 = [],
-      error1, error2, valid1, valid2, i, j;
-
-  this.pos(imagePoints, posRotation1, posRotation2, posTranslation);
-
-  valid1 = this.isValid(posRotation1, posTranslation);
-  if (valid1){
-    error1 = this.iterate(imagePoints, posRotation1, posTranslation, rotation1, translation1);
-  }else{
-    error1 = {euclidean: -1.0, pixels: -1, maximum: -1.0};
-  }
-
-  valid2 = this.isValid(posRotation2, posTranslation);
-  if (valid2){
-    error2 = this.iterate(imagePoints, posRotation2, posTranslation, rotation2, translation2);
-  }else{
-    error2 = {euclidean: -1.0, pixels: -1, maximum: -1.0};
-  }
-
-  for (i = 0; i < 3; ++ i){
-    for (j = 0; j < 3; ++ j){
-      if (valid1){
-        translation1[i] -= rotation1[i][j] * this.objectPoints[0][j];
-      }
-      if (valid2){
-        translation2[i] -= rotation2[i][j] * this.objectPoints[0][j];
-      }
-    }
-  }
-
-  return error1.euclidean < error2.euclidean?
-    new POS.Pose(error1.pixels, rotation1, translation1, error2.pixels, rotation2, translation2):
-    new POS.Pose(error2.pixels, rotation2, translation2, error1.pixels, rotation1, translation1);
-};
-
-POS.Posit.prototype.pos = function(imagePoints, rotation1, rotation2, translation){
-  var np = this.objectPoints.length, imageVectors = [],
-      i0 = [], j0 = [], ivec = [], jvec = [], row1 = [], row2 = [], row3 = [],
-      i0i0, j0j0, i0j0, delta, q, lambda, mu, scale, i, j;
-
-  for (i = 0; i < np; ++ i){
-    imageVectors[i] = [imagePoints[i].x - imagePoints[0].x,
-                       imagePoints[i].y - imagePoints[0].y];
-  }
-
-  //i0 and j0
-  for (i = 0; i < 3; ++ i){
-    i0[i] = 0.0;
-    j0[i] = 0.0;
-    for (j = 0; j < np; ++ j){
-      i0[i] += this.objectMatrix[i][j] * imageVectors[j][0];
-      j0[i] += this.objectMatrix[i][j] * imageVectors[j][1];
-    }
-  }
-
-  i0i0 = i0[0] * i0[0] + i0[1] * i0[1] + i0[2] * i0[2];
-  j0j0 = j0[0] * j0[0] + j0[1] * j0[1] + j0[2] * j0[2];
-  i0j0 = i0[0] * j0[0] + i0[1] * j0[1] + i0[2] * j0[2];
-
-  //Lambda and mu
-  delta = (j0j0 - i0i0) * (j0j0 - i0i0) + 4.0 * (i0j0 * i0j0);
-
-  if (j0j0 - i0i0 >= 0.0){
-    q = (j0j0 - i0i0 + Math.sqrt(delta) ) / 2.0;
-  }else{
-    q = (j0j0 - i0i0 - Math.sqrt(delta) ) / 2.0;
-  }
-
-  if (q >= 0.0){
-    lambda = Math.sqrt(q);
-    if (0.0 === lambda){
-      mu = 0.0;
-    }else{
-      mu = -i0j0 / lambda;
-    }
-  }else{
-    lambda = Math.sqrt( -(i0j0 * i0j0) / q);
-    if (0.0 === lambda){
-      mu = Math.sqrt(i0i0 - j0j0);
-    }else{
-      mu = -i0j0 / lambda;
-    }
-  }
-
-  //First rotation
-  for (i = 0; i < 3; ++ i){
-    ivec[i] = i0[i] + lambda * this.objectNormal[i];
-    jvec[i] = j0[i] + mu * this.objectNormal[i];
-  }
-
-  scale = Math.sqrt(ivec[0] * ivec[0] + ivec[1] * ivec[1] + ivec[2] * ivec[2]);
-
-  for (i = 0; i < 3; ++ i){
-    row1[i] = ivec[i] / scale;
-    row2[i] = jvec[i] / scale;
-  }
-
-  row3[0] = row1[1] * row2[2] - row1[2] * row2[1];
-  row3[1] = row1[2] * row2[0] - row1[0] * row2[2];
-  row3[2] = row1[0] * row2[1] - row1[1] * row2[0];
-
-  for (i = 0; i < 3; ++ i){
-    rotation1[0][i] = row1[i];
-    rotation1[1][i] = row2[i];
-    rotation1[2][i] = row3[i];
-  }
-
-  //Second rotation
-  for (i = 0; i < 3; ++ i){
-    ivec[i] = i0[i] - lambda * this.objectNormal[i];
-    jvec[i] = j0[i] - mu * this.objectNormal[i];
-  }
-
-  for (i = 0; i < 3; ++ i){
-    row1[i] = ivec[i] / scale;
-    row2[i] = jvec[i] / scale;
-  }
-
-  row3[0] = row1[1] * row2[2] - row1[2] * row2[1];
-  row3[1] = row1[2] * row2[0] - row1[0] * row2[2];
-  row3[2] = row1[0] * row2[1] - row1[1] * row2[0];
-
-  for (i = 0; i < 3; ++ i){
-    rotation2[0][i] = row1[i];
-    rotation2[1][i] = row2[i];
-    rotation2[2][i] = row3[i];
-  }
-
-  //Translation
-  translation[0] = imagePoints[0].x / scale;
-  translation[1] = imagePoints[0].y / scale;
-  translation[2] = this.focalLength / scale;
-};
-
-POS.Posit.prototype.isValid = function(rotation, translation){
-  var np = this.objectPoints.length, zmin = Infinity, i = 0, zi;
-
-  for (; i < np; ++ i){
-    zi = translation[2] +
-      (rotation[2][0] * this.objectVectors[i][0] +
-       rotation[2][1] * this.objectVectors[i][1] +
-       rotation[2][2] * this.objectVectors[i][2]);
-    if (zi < zmin){
-      zmin = zi;
-    }
-  }
-
-  return zmin >= 0.0;
-};
-
-POS.Posit.prototype.iterate = function(imagePoints, posRotation, posTranslation, rotation, translation){
-  var np = this.objectPoints.length,
-      oldSopImagePoints = [], sopImagePoints = [],
-      rotation1 = [[],[],[]], rotation2 = [[],[],[]],
-      translation1 = [], translation2 = [],
-      converged = false, iteration = 0,
-      oldImageDifference, imageDifference, factor,
-      error, error1, error2, delta, i, j;
-
-  for (i = 0; i < np; ++ i){
-    oldSopImagePoints[i] = {x: imagePoints[i].x,
-                            y: imagePoints[i].y};
-  }
-
-  for (i = 0; i < 3; ++ i){
-    for (j = 0; j < 3; ++ j){
-      rotation[i][j] = posRotation[i][j];
-    }
-    translation[i] = posTranslation[i];
-  }
-
-  for (i = 0; i < np; ++ i){
-    factor = 0.0;
-    for (j = 0; j < 3; ++ j){
-      factor += this.objectVectors[i][j] * rotation[2][j] / translation[2];
-    }
-    sopImagePoints[i] = {x: (1.0 + factor) * imagePoints[i].x,
-                         y: (1.0 + factor) * imagePoints[i].y};
-  }
-
-  imageDifference = 0.0;
-
-  for (i = 0; i < np; ++ i){
-    imageDifference += Math.abs(sopImagePoints[i].x - oldSopImagePoints[i].x);
-    imageDifference += Math.abs(sopImagePoints[i].y - oldSopImagePoints[i].y);
-  }
-
-  for (i = 0; i < 3; ++ i){
-    translation1[i] = translation[i] -
-      (rotation[i][0] * this.objectPoints[0][0] +
-       rotation[i][1] * this.objectPoints[0][1] +
-       rotation[i][2] * this.objectPoints[0][2]);
-  }
-
-  error = error1 = this.error(imagePoints, rotation, translation1);
-
-  //Convergence
-  converged = (0.0 === error1.pixels) || (imageDifference < 0.01);
-
-  while( iteration ++ < 100 && !converged ){
-
-    for (i = 0; i < np; ++ i){
-      oldSopImagePoints[i].x = sopImagePoints[i].x;
-      oldSopImagePoints[i].y = sopImagePoints[i].y;
-    }
-
-    this.pos(sopImagePoints, rotation1, rotation2, translation);
-
-    for (i = 0; i < 3; ++ i){
-      translation1[i] = translation[i] -
-        (rotation1[i][0] * this.objectPoints[0][0] +
-         rotation1[i][1] * this.objectPoints[0][1] +
-         rotation1[i][2] * this.objectPoints[0][2]);
-
-      translation2[i] = translation[i] -
-        (rotation2[i][0] * this.objectPoints[0][0] +
-         rotation2[i][1] * this.objectPoints[0][1] +
-         rotation2[i][2] * this.objectPoints[0][2]);
-    }
-
-    error1 = this.error(imagePoints, rotation1, translation1);
-    error2 = this.error(imagePoints, rotation2, translation2);
-
-    if ( (error1.euclidean >= 0.0) && (error2.euclidean >= 0.0) ){
-      if (error2.euclidean < error1.euclidean){
-        error = error2;
-        for (i = 0; i < 3; ++ i){
-          for (j = 0; j < 3; ++ j){
-            rotation[i][j] = rotation2[i][j];
-          }
-        }
-      }else{
-        error = error1;
-        for (i = 0; i < 3; ++ i){
-          for (j = 0; j < 3; ++ j){
-            rotation[i][j] = rotation1[i][j];
-          }
-        }
-      }
-    }
-
-    if ( (error1.euclidean < 0.0) && (error2.euclidean >= 0.0) ){
-      error = error2;
-      for (i = 0; i < 3; ++ i){
-        for (j = 0; j < 3; ++ j){
-          rotation[i][j] = rotation2[i][j];
-        }
-      }
-    }
-
-    if ( (error2.euclidean < 0.0) && (error1.euclidean >= 0.0) ){
-      error = error1;
-      for (i = 0; i < 3; ++ i){
-        for (j = 0; j < 3; ++ j){
-          rotation[i][j] = rotation1[i][j];
-        }
-      }
-    }
-
-    for (i = 0; i < np; ++ i){
-      factor = 0.0;
-      for (j = 0; j < 3; ++ j){
-        factor += this.objectVectors[i][j] * rotation[2][j] / translation[2];
-      }
-      sopImagePoints[i].x = (1.0 + factor) * imagePoints[i].x;
-      sopImagePoints[i].y = (1.0 + factor) * imagePoints[i].y;
-    }
-
-    oldImageDifference = imageDifference;
-    imageDifference = 0.0;
-
-    for (i = 0; i < np; ++ i){
-      imageDifference += Math.abs(sopImagePoints[i].x - oldSopImagePoints[i].x);
-      imageDifference += Math.abs(sopImagePoints[i].y - oldSopImagePoints[i].y);
-    }
-
-    delta = Math.abs(imageDifference - oldImageDifference);
-
-    converged = (0.0 === error.pixels) || (delta < 0.01);
-  }
-
-  return error;
-};
-
-POS.Posit.prototype.error = function(imagePoints, rotation, translation){
-  var np = this.objectPoints.length,
-      move = [], projection = [], errorvec = [],
-      euclidean = 0.0, pixels = 0.0, maximum = 0.0,
-      i, j, k;
-
-  if ( !this.isValid(rotation, translation) ){
-    return {euclidean: -1.0, pixels: -1, maximum: -1.0};
-  }
-
-  for (i = 0; i < np; ++ i){
-    move[i] = [];
-    for (j = 0; j < 3; ++ j){
-      move[i][j] = translation[j];
-    }
-  }
-
-  for (i = 0; i < np; ++ i){
-    for (j = 0; j < 3; ++ j){
-      for (k = 0; k < 3; ++ k){
-        move[i][j] += rotation[j][k] * this.objectPoints[i][k];
-      }
-    }
-  }
-
-  for (i = 0; i < np; ++ i){
-    projection[i] = [];
-    for (j = 0; j < 2; ++ j){
-      projection[i][j] = this.focalLength * move[i][j] / move[i][2];
-    }
-  }
-
-  for (i = 0; i < np; ++ i){
-    errorvec[i] = [projection[i][0] - imagePoints[i].x,
-                   projection[i][1] - imagePoints[i].y];
-  }
-
-  for (i = 0; i < np; ++ i){
-    euclidean += Math.sqrt(errorvec[i][0] * errorvec[i][0] +
-                           errorvec[i][1] * errorvec[i][1]);
-
-    pixels += Math.abs( Math.round(projection[i][0]) - Math.round(imagePoints[i].x) ) +
-              Math.abs( Math.round(projection[i][1]) - Math.round(imagePoints[i].y) );
-
-    if (Math.abs(errorvec[i][0]) > maximum){
-      maximum = Math.abs(errorvec[i][0]);
-    }
-    if (Math.abs(errorvec[i][1]) > maximum){
-      maximum = Math.abs(errorvec[i][1]);
-    }
-  }
-
-  return {euclidean: euclidean / np, pixels: pixels, maximum: maximum};
-};
-
-POS.pseudoInverse = function(a, n, b){
-  var w = [], v = [[],[],[]], s = [[],[],[]],
-      wmax = 0.0, cn = 0,
-      i, j, k;
-
-  SVD.svdcmp(a, n, 3, w, v);
-
-  for (i = 0; i < 3; ++ i){
-    if (w[i] > wmax){
-      wmax = w[i];
-    }
-  }
-
-  wmax *= 0.01;
-
-  for (i = 0; i < 3; ++ i){
-    if (w[i] < wmax){
-      w[i] = 0.0;
-    }
-  }
-
-  for (j = 0; j < 3; ++ j){
-    if (0.0 === w[j]){
-      ++ cn;
-      for (k = j; k < 2; ++ k){
-        for (i = 0; i < n; ++ i){
-          a[i][k] = a[i][k + 1];
-        }
-        for (i = 0; i < 3; ++ i){
-          v[i][k] = v[i][k + 1];
-        }
-      }
-    }
-  }
-
-  for (j = 0; j < 2; ++ j){
-    if (0.0 === w[j]){
-      w[j] = w[j + 1];
-    }
-  }
-
-  for (i = 0; i < 3; ++ i){
-    for (j = 0; j < 3 - cn; ++ j){
-      s[i][j] = v[i][j] / w[j];
-    }
-  }
-
-  for (i = 0; i < 3; ++ i){
-    for (j = 0; j < n; ++ j){
-      b[i][j] = 0.0;
-      for (k = 0; k < 3 - cn; ++ k){
-        b[i][j] += s[i][k] * a[j][k];
-      }
-    }
-  }
-};
-
-POS.Pose = function(error1, rotation1, translation1, error2, rotation2, translation2){
-  this.bestError = error1;
-  this.bestRotation = rotation1;
-  this.bestTranslation = translation1;
-  this.alternativeError = error2;
-  this.alternativeRotation = rotation2;
-  this.alternativeTranslation = translation2;
-};
-
-}).call(scope); return scope; })();
+  return worldEnginePromise;
+}
