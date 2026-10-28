@@ -6,9 +6,14 @@ import { fox } from './fox.ts';
 
 export type AnimalId = 'rabbit' | 'crane' | 'fox';
 /** The five paper colours of the app (Figma logo palette) as keyed by the task store. */
-export type PaperId = 'peach' | 'blue' | 'sage' | 'orange' | 'purple';
+export type PaperId = 'peach' | 'blue' | 'sage' | 'orange' | 'purple' | 'soft-peach' | 'soft-blue' | 'soft-sage' | 'soft-orange' | 'soft-purple';
 /** Front face, reverse side, lit paper edge and edge shadow for each sheet colour. */
 export const PAPERS: Record<PaperId, { paper: number; reverse: number; light: number; dark: number }> = {
+  'soft-peach': { paper: 0xdb8f85, reverse: 0xc18d83, light: 0xf2d9cf, dark: 0x76524c },
+  'soft-blue': { paper: 0x86abc5, reverse: 0x8da1af, light: 0xdde5eb, dark: 0x4d6372 },
+  'soft-sage': { paper: 0x92b380, reverse: 0x8f9e87, light: 0xdfe6d8, dark: 0x53644d },
+  'soft-orange': { paper: 0xd19a60, reverse: 0xb38a65, light: 0xedd8bb, dark: 0x755439 },
+  'soft-purple': { paper: 0xb18dbf, reverse: 0x9e8ca7, light: 0xe6dce9, dark: 0x65526e },
   orange: { paper: 0xf24e1e, reverse: 0xff7262, light: 0xffb3a0, dark: 0x5a1505 },
   peach: { paper: 0xff7262, reverse: 0xf24e1e, light: 0xffc4b8, dark: 0x5e1a10 },
   purple: { paper: 0xa259ff, reverse: 0xff7262, light: 0xd2b0ff, dark: 0x2c1257 },
