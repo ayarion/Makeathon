@@ -327,11 +327,12 @@ kit.scene('crane', {
   function loop(now) {
     const t = (now - t0) / 1000 + offset;
     draw(t);
-    if (t >= DURATION - 0.4) finish();
+    if (t >= DURATION) { draw(DURATION); finish(); return; }
     raf = requestAnimationFrame(loop);
   }
   const api = {
     duration: DURATION,
+    get completed() { return doneSent; },
     onDone: null,
     play() { if (!ready) return; cancelAnimationFrame(raf); doneSent = false; offset = 0; t0 = performance.now(); if (reduce) { draw(DURATION); finish(); return; } raf = requestAnimationFrame(loop); },
     replay() { this.play(); },

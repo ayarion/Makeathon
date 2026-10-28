@@ -204,7 +204,10 @@ setInterval(()=>{
 // owns interruption cleanup; treating this as a web exit would dismiss AR instantly.
 document.addEventListener('visibilitychange',()=>{if(document.hidden){introGeneration++;if(!nativeActive)stopRinging();if(experience)interruptExperience();}else if(introActive){ensureIntroSound();}});
 window.addEventListener('pagehide',()=>{introActive=false;introGeneration++;closeStory();interruptExperience();stopRinging();});
-renderAll();go(['write','alarm','collection'].includes(location.hash.slice(1))?location.hash.slice(1):'write',{focus:false});
+const entryPage=['write','alarm','collection'].includes(location.hash.slice(1))?location.hash.slice(1):'write';
+const qrExperience=new URLSearchParams(location.search).get('experience')==='1';
+// Modal dialogs occupy the top layer, so defer entry routing until the title completes.
+renderAll();go('write',{focus:false});
 if(storageProblem)openDialog('保存したデータを読み込めなかったよ',`<p>データを残したままにしてあるよ。再読み込みして、もう一度ためしてね。</p>`,[{label:'再読み込み',kind:'primary',run:()=>location.reload()}]);
 
 // The supplied title owns its animation; wait for the completed logo before fading.
@@ -217,13 +220,15 @@ function leaveTitle(){
  setTimeout(()=>{document.getElementById('title-animation')?.contentWindow?.OrigoTitle?.stop();titleScreen?.remove();beginFirstRun();},matchMedia('(prefers-reduced-motion: reduce)').matches?0:600);
 }
 const titleFrame=document.getElementById('title-animation');
-function connectTitle(){const w=titleFrame?.contentWindow;if(!w)return;w.addEventListener('origo:done',()=>setTimeout(leaveTitle,450),{once:true});if(w.OrigoTitle)w.OrigoTitle.onDone=()=>setTimeout(leaveTitle,450);if(w.OrigoTitle&&matchMedia('(prefers-reduced-motion: reduce)').matches)leaveTitle();}
+function connectTitle(){const w=titleFrame?.contentWindow;if(!w)return;w.addEventListener('origo:done',()=>setTimeout(leaveTitle,450),{once:true});if(w.OrigoTitle)w.OrigoTitle.onDone=()=>setTimeout(leaveTitle,450);if(w.OrigoTitle?.completed)setTimeout(leaveTitle,450);}
 connectTitle();titleFrame?.addEventListener('load',connectTitle);
-if(titleScreen)setTimeout(leaveTitle,6500);else beginFirstRun();
+titleFrame?.addEventListener('error',leaveTitle,{once:true});
+if(!titleScreen)beginFirstRun();
 function isDesktop(){return !(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));}
 function beginFirstRun(){
  if(storageProblem)return;
- if(new URLSearchParams(location.search).get('experience')==='1'){go('alarm');morningGate();return;}
+ if(qrExperience){morningGate({fromTitle:true});return;}
+ go(entryPage,{focus:false});
  let done=false;try{done=localStorage.getItem('origo.tutorial.v2')==='1';}catch{}
  if(!done || new URLSearchParams(location.search).get('tutorial')==='1')startTutorial();
 }
