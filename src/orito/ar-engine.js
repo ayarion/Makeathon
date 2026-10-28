@@ -107,7 +107,7 @@ export class MorningExperience {
     }
     const stage = document.createElement('section');
     stage.className = 'morning-stage'; stage.setAttribute('aria-label', '朝の追いかけっこ');
-    stage.innerHTML = `<div class="morning-stage__landscape" ${this.mode === 'demo' ? '' : 'hidden'}></div><video class="morning-stage__camera" autoplay muted playsinline ${this.mode === 'camera' ? '' : 'hidden'}></video><canvas class="morning-stage__gl" ${this.mode === 'ar' ? '' : 'hidden'} aria-hidden="true"></canvas><div class="morning-stage__grain" ${this.mode === 'demo' ? '' : 'hidden'}></div><div class="morning-stage__creatures" ${this.mode === 'ar' ? 'hidden' : ''}></div><div class="morning-stage__feedback" hidden aria-hidden="true"></div><div class="morning-stage__top"><span class="morning-stage__badge">${this.mode === 'ar' ? 'AR' : this.mode === 'camera' ? 'カメラ DEMO' : 'DEMO'}</span></div><div class="morning-stage__bottom"><p class="morning-stage__status" role="status" aria-live="polite"></p><div class="morning-stage__progress" aria-hidden="true"><i></i></div><div class="morning-stage__actions"><button type="button" class="morning-stage__primary" data-action="primary" disabled>ここから始める</button><button type="button" class="morning-stage__secondary" data-action="reset">やり直す</button></div></div>`;
+    stage.innerHTML = `<div class="morning-stage__landscape" ${this.mode === 'demo' ? '' : 'hidden'}></div><video class="morning-stage__camera" autoplay muted playsinline ${this.mode === 'camera' ? '' : 'hidden'}></video><canvas class="morning-stage__gl" ${this.mode === 'ar' ? '' : 'hidden'} aria-hidden="true"></canvas><div class="morning-stage__grain" ${this.mode === 'demo' ? '' : 'hidden'}></div><div class="morning-stage__creatures" ${this.mode === 'ar' ? 'hidden' : ''}></div><div class="morning-stage__feedback" hidden aria-hidden="true"></div><div class="morning-stage__top"><span class="morning-stage__badge">${this.mode === 'ar' ? 'AR' : this.mode === 'camera' ? 'カメラ DEMO' : 'DEMO'}</span></div><div class="morning-stage__bottom"><p class="morning-stage__status" role="status" aria-live="polite"></p><div class="morning-stage__progress" aria-hidden="true"><i></i></div><div class="morning-stage__actions"><button type="button" class="morning-stage__primary" data-action="primary" disabled>ここで決定</button></div></div>`;
     this.mount.replaceChildren(stage); this.stage = stage;
     this.video = stage.querySelector('video'); this.canvas = stage.querySelector('canvas');
     this.status = stage.querySelector('[role=status]'); this.primary = stage.querySelector('[data-action=primary]'); this.progress = stage.querySelector('.morning-stage__progress i'); this.muteButton = stage.querySelector('[data-action=mute]'); this.feedback = stage.querySelector('.morning-stage__feedback');
@@ -122,7 +122,6 @@ export class MorningExperience {
       if (view) element.classList.add('has-origami'); else element.innerHTML = animalSVG(kind);
       this.views.push(view);
     });
-    stage.querySelector('[data-action=reset]').onclick = () => this.reset();
     this.primary.onclick = () => {
       if (this.paused) { void this._resume(); return; }
       if (this.phase === 'capture-ready') { this.capture(); return; }
@@ -188,9 +187,9 @@ export class MorningExperience {
 
   _prepareDemoPlacement() {
     this.demoFrom = [0, -.03]; this.demoTarget = [0, -.03]; this.elapsed = 0; this.lastFrame = 0;
-    this.primary.hidden = false; this.primary.disabled = false; this.primary.textContent = 'ここから始める（デモ）';
+    this.primary.hidden = false; this.primary.disabled = false; this.primary.textContent = 'ここで決定';
     this.progress.style.width = '0%';
-    this._state('placing', '床の位置を決めよう（デモ）');
+    this._state('placing', '床を写してください');
   }
 
   _placementSuccess() {
@@ -352,7 +351,7 @@ export class MorningExperience {
       // Reset is a user gesture and must leave a paused XR session usable.
       // Otherwise the placement button remains disabled behind paused=true.
       this.paused = false; this.audio?.resume().catch(() => {});
-      this.primary.hidden = false; this.primary.disabled = true; this.primary.textContent = 'ここから始める'; this.progress.style.width = '0%';
+      this.primary.hidden = false; this.primary.disabled = true; this.primary.textContent = 'ここで決定'; this.progress.style.width = '0%';
       this._state('placing', '3m四方を空けて、2m先の床を映そう');
     } else if (this.paused) { this.savedPhase = 'placing'; void this._resume(); }
     else { this.audio?.resume().catch(() => {}); this._prepareDemoPlacement(); }
