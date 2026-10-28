@@ -18,7 +18,7 @@
 
 import { mountAnimal, OrigamiXR } from './origami3d.ts';
 
-const LIMITS = Object.freeze({ chaseSeconds: 30, radius: 1.15, speed: .62, turnSeconds: 1.8, escapeDistance: .95, escapeCooldown: 1.4, settleSeconds: 4, placementMinimum: 2, placementMaximum: 3.5, captureDistance: 1.3, dwellSeconds: .8, minimumMovement: .8, demoTurnSeconds: 1.45 });
+const LIMITS = Object.freeze({ chaseSeconds: 10, radius: 1.15, speed: .62, turnSeconds: 1.8, escapeDistance: .95, escapeCooldown: 1.4, settleSeconds: 4, placementMinimum: 2, placementMaximum: 3.5, captureDistance: 1.3, dwellSeconds: .8, minimumMovement: .8, demoTurnSeconds: 1.45 });
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const planarDistance = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
