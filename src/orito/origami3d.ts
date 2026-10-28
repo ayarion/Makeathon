@@ -494,6 +494,17 @@ export class OrigamiXR {
     });
   }
 
+  trackedCamera(position: {x:number;y:number;z:number}, rotation: {x:number;y:number;z:number;w:number}, intrinsics: number[], width: number, height: number) {
+    const size=this.renderer.getSize(new THREE.Vector2());
+    if(size.x!==width||size.y!==height)this.renderer.setSize(width,height,false);
+    this.camera.position.set(position.x,position.y,position.z);
+    this.camera.quaternion.set(rotation.x,rotation.y,rotation.z,rotation.w);
+    this.camera.projectionMatrix.fromArray(intrinsics);
+    this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
+    this.camera.updateMatrixWorld(true);
+    this.actors.forEach(actor=>actor.animal.setResolution(width,height));
+  }
+
   /** Only a ray through an animal mesh may finish the XR catch. */
   hitAnimal(x: number, y: number) {
     const ray = new THREE.Raycaster();
