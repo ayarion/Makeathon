@@ -20,7 +20,11 @@ export type EmoteRole = 'surrender' | 'escape' | 'cheer';
 
 const KINDS: Kind[] = ['crane', 'rabbit', 'fox'];
 const isKind = (kind: unknown): kind is Kind => KINDS.includes(kind as Kind);
-const paperOf = (kind: Kind, paper?: unknown): Paper => (typeof paper === 'string' && paper in PAPERS ? (paper as Paper) : DEFAULT_PAPER[kind]);
+const paperOf = (kind: Kind, paper?: unknown): Paper => {
+  if (typeof paper !== 'string' || !(paper in PAPERS)) return DEFAULT_PAPER[kind];
+  const soft = `soft-${paper}`;
+  return (soft in PAPERS ? soft : paper) as Paper;
+};
 
 /** Which one-shot each animal uses for a role in the story. */
 const EMOTE: Record<EmoteRole, Record<Kind, string>> = {
@@ -287,6 +291,35 @@ export function upgradeImage(host: Element | null, options: MountOptions): Origa
 // Portraits for lists and dialogs
 
 const portraits = new Map<string, string>();
+const paperSamples = new Map<string, string>();
+/** Sample the lit sheet, not its unlit material hex, so CSS paper matches the fold. */
+export function paperDisplayColor(paper: string): string {
+  if (paperSamples.has(paper)) return paperSamples.get(paper)!;
+  const colour = paperOf('crane', paper);
+  const fallback = `#${PAPERS[colour].paper.toString(16).padStart(6, '0')}`;
+  if (!sharedRenderer()) return fallback;
+  const animal = createOrigamiAnimal('crane', colour);
+  const stage = buildStage(animal, { mode: 'auto' });
+  try {
+    animal.unfoldTo(0, 0);
+    animal.update(0);
+    stage.aim(1);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    animal.setResolution(64, 64);
+    drawInto(ctx, stage.scene, stage.camera, 64, 64);
+    const pixels = ctx.getImageData(24, 24, 16, 16).data;
+    const sum = [0, 0, 0]; let count = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] < 250) continue;
+      sum.forEach((_, c) => { sum[c] += pixels[i + c]; }); count++;
+    }
+    const result = count ? `#${sum.map(v => Math.round(v / count).toString(16).padStart(2, '0')).join('')}` : fallback;
+    paperSamples.set(paper, result);
+    return result;
+  } finally { animal.dispose(); stage.dispose(); }
+}
 /** A still of the folded animal in its paper colour (object URL), or the SVG when WebGL is missing. */
 export function portrait(kind: string, paper?: string): string {
   if (!isKind(kind)) return fallbackSrc(kind);
