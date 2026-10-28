@@ -103,15 +103,3 @@ body{background-attachment:scroll;min-height:100dvh}
 .animal-card.is-sample img{opacity:.7}.animal-card.is-sample p{opacity:.75}
 @media(max-width:850px){.topbar{top:max(6px,calc(env(safe-area-inset-top) - 4px))}main{padding-top:36px}}
 @media(min-width:851px){.topbar{margin-bottom:24px}}
-
-/* Local demo entry: writing stays the main action. */
-.home-demo{width:min(100%,760px);margin:0 auto 28px;padding:22px 24px;background:#fffdf7;border:1px solid #d1ddcd;border-radius:20px;display:flex;align-items:center;justify-content:space-between;gap:20px}
-.demo-tag{font-size:14px;font-weight:750;letter-spacing:.12em;color:#41664c}.home-demo h2{font-size:24px;line-height:1.4;margin:8px 0}.home-demo p{font-size:16px;line-height:1.5;color:#526451;margin:0}.home-demo .button{flex-shrink:0}
-.morning-stage__tools{display:flex;gap:8px}.morning-stage__top .morning-stage__tools button{font-size:15px;padding:10px 12px}
-@media(max-width:600px){.home-demo{padding:20px;flex-direction:column;align-items:stretch;gap:16px}.home-demo h2{font-size:23px}}
-/* Readable ink on every selectable paper colour. */
-.paper-sheet,.paper-sheet textarea,.paper-heading,.paper-colors legend,.sheet-top>span{color:#171717}
-.paper-sheet textarea::placeholder{color:#333;opacity:1}.paper-heading{text-shadow:none}
-
-/* Home title on the origami paper. */
-#write-title{color:#fff}
