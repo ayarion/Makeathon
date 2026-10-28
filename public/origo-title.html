@@ -6,7 +6,8 @@
 <title>折りGO！ タイトル画面</title>
 <style>
 html, body { margin:0; height:100%; overflow:hidden; background:#FCEEDC }
-body { background:linear-gradient(180deg, #FCEEDC, #F7CF8A 16%, #F2A877 36%, #EC9C8B 54%, #E5825F 74%, #D8805B) }
+body { background:#FCEEDC; min-height:100lvh }
+.crane-sky { -webkit-mask-image:linear-gradient(transparent,black 12%,black 78%,transparent); mask-image:linear-gradient(transparent,black 12%,black 78%,transparent) }
 #origo-root { position:fixed; inset:0; overflow:hidden }
 /* ===== ここから: アニメーション本体のCSS (base.css) ===== */
 #origo-root, #stage { --ground:#F2A877; --main:#FFFFFF; --second:#C9714F; --accent:#F7CF8A; color:var(--main); font-family:var(--sans, system-ui, sans-serif); --warm-cream:#FCEEDC; --warm-coral:#E5825F; --warm-rose:#EC9C8B; --warm-blush:#F5C6B5 }
