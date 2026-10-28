@@ -107,7 +107,7 @@ export class MorningExperience {
     }
     const stage = document.createElement('section');
     stage.className = 'morning-stage'; stage.setAttribute('aria-label', '朝の追いかけっこ');
-    stage.innerHTML = `<div class="morning-stage__landscape" ${this.mode === 'demo' ? '' : 'hidden'}></div><video class="morning-stage__camera" autoplay muted playsinline ${this.mode === 'camera' ? '' : 'hidden'}></video><canvas class="morning-stage__gl" ${this.mode === 'ar' ? '' : 'hidden'} aria-hidden="true"></canvas><div class="morning-stage__grain" ${this.mode === 'demo' ? '' : 'hidden'}></div><div class="morning-stage__creatures" ${this.mode === 'ar' ? 'hidden' : ''}></div><div class="morning-stage__feedback" hidden aria-hidden="true"></div><div class="morning-stage__top"><span class="morning-stage__badge">${this.mode === 'ar' ? 'AR' : this.mode === 'camera' ? 'カメラ DEMO' : 'DEMO'}</span><div class="morning-stage__tools"><button type="button" data-action="mute">音を鳴らす</button><button type="button" data-action="exit" aria-label="朝の体験を終了する">終了</button></div></div><div class="morning-stage__bottom"><p class="morning-stage__status" role="status" aria-live="polite"></p><div class="morning-stage__progress" aria-hidden="true"><i></i></div><div class="morning-stage__actions"><button type="button" class="morning-stage__primary" data-action="primary" disabled>ここから始める</button><button type="button" class="morning-stage__secondary" data-action="reset">やり直す</button></div></div>`;
+    stage.innerHTML = `<div class="morning-stage__landscape" ${this.mode === 'demo' ? '' : 'hidden'}></div><video class="morning-stage__camera" autoplay muted playsinline ${this.mode === 'camera' ? '' : 'hidden'}></video><canvas class="morning-stage__gl" ${this.mode === 'ar' ? '' : 'hidden'} aria-hidden="true"></canvas><div class="morning-stage__grain" ${this.mode === 'demo' ? '' : 'hidden'}></div><div class="morning-stage__creatures" ${this.mode === 'ar' ? 'hidden' : ''}></div><div class="morning-stage__feedback" hidden aria-hidden="true"></div><div class="morning-stage__top"><span class="morning-stage__badge">${this.mode === 'ar' ? 'AR' : this.mode === 'camera' ? 'カメラ DEMO' : 'DEMO'}</span></div><div class="morning-stage__bottom"><p class="morning-stage__status" role="status" aria-live="polite"></p><div class="morning-stage__progress" aria-hidden="true"><i></i></div><div class="morning-stage__actions"><button type="button" class="morning-stage__primary" data-action="primary" disabled>ここから始める</button><button type="button" class="morning-stage__secondary" data-action="reset">やり直す</button></div></div>`;
     this.mount.replaceChildren(stage); this.stage = stage;
     this.video = stage.querySelector('video'); this.canvas = stage.querySelector('canvas');
     this.status = stage.querySelector('[role=status]'); this.primary = stage.querySelector('[data-action=primary]'); this.progress = stage.querySelector('.morning-stage__progress i'); this.muteButton = stage.querySelector('[data-action=mute]'); this.feedback = stage.querySelector('.morning-stage__feedback');
@@ -123,8 +123,6 @@ export class MorningExperience {
       this.views.push(view);
     });
     stage.querySelector('[data-action=reset]').onclick = () => this.reset();
-    stage.querySelector('[data-action=mute]').onclick = () => this.setMuted(!this.muted);
-    stage.querySelector('[data-action=exit]').onclick = () => this._exit();
     this.primary.onclick = () => {
       if (this.paused) { void this._resume(); return; }
       if (this.phase === 'capture-ready') { this.capture(); return; }
@@ -189,7 +187,6 @@ export class MorningExperience {
   }
 
   _prepareDemoPlacement() {
-    this.demoWalked = 0; this.demoDistance = 2.1; this.dwell = 0;
     this.demoFrom = [0, -.03]; this.demoTarget = [0, -.03]; this.elapsed = 0; this.lastFrame = 0;
     this.primary.hidden = false; this.primary.disabled = false; this.primary.textContent = 'ここから始める（デモ）';
     this.progress.style.width = '0%';
@@ -246,9 +243,6 @@ export class MorningExperience {
       }
       if (this.elapsed >= this.chaseSeconds) this._surrender();
     }
-    if (this.phase === 'surrendered' && this.demoWalked >= 1.2 && this.demoDistance <= .45) {
-      this.dwell += dt; if (this.dwell >= .85) this._readyToCapture();
-    }
     const resting = ['surrendered', 'capture-ready', 'capturing'].includes(this.phase);
     const progress = resting ? 1 : Math.min(1, (this.elapsed % LIMITS.demoTurnSeconds) / 1.1);
     const ease = progress * progress * (3 - 2 * progress);
@@ -269,7 +263,7 @@ export class MorningExperience {
       const edge = Math.max(0, width / 2 - (element.clientWidth || 155) / 2 - 16);
       const jump = view || this._reduced || this.phase !== 'chasing' ? 0 : Math.abs(Math.sin(this.elapsed * 6 + index)) * 18;
       const tilt = view || this._reduced || this.phase !== 'chasing' ? 0 : Math.sin(this.elapsed * 5 + index) * 7;
-      element.style.transform = `translate(calc(-50% + ${clamp(x + offset, -edge, edge)}px),calc(-50% + ${y + (index ? 22 : 0) - jump}px)) rotate(${tilt}deg) scale(${(resting ? .65 + Math.min(this.demoWalked || 0, 1.8) / 3 : depthOf(y / height)).toFixed(3)})`;
+      element.style.transform = `translate(calc(-50% + ${clamp(x + offset, -edge, edge)}px),calc(-50% + ${y + (index ? 22 : 0) - jump}px)) rotate(${tilt}deg) scale(${(resting ? 1 : depthOf(y / height)).toFixed(3)})`;
     });
     this.progress.style.width = `${Math.min(this.elapsed / this.chaseSeconds, 1) * 100}%`;
   }
@@ -280,7 +274,7 @@ export class MorningExperience {
     this.creatures.forEach(element => element.classList.add('is-surrendered'));
     this._emote('surrender');
     this._state('surrendered', this.mode === 'ar' ? '近づいて、タップでつかまえよう' : 'つかまえて、の合図！');
-    if (this.mode !== 'ar') { this.demoWalked = 0; this.demoDistance = 2.1; this._state('surrendered', 'あと2.1m。近づいてみよう（操作デモ）'); }
+    if (this.mode !== 'ar') this._readyToCapture();
   }
 
   _emote(role) {
@@ -291,10 +285,7 @@ export class MorningExperience {
   advanceDemo() {
     // Camera/demo never infer physical proximity from image size or a timer.
     if (!this.active || this.paused || this.mode === 'ar' || this.phase !== 'surrendered' || this.captured) return false;
-    this.demoWalked += .3; this.demoDistance = Math.max(0, 2.1 - this.demoWalked);
-    this._state('surrendered', `あと${this.demoDistance.toFixed(1)}m。近づいてみよう（操作デモ）`);
-    if (this.demoWalked >= 1.2 && this.demoDistance <= .45) { this.primary.disabled = true; this.primary.textContent = 'そのまま待ってね'; }
-    return true;
+    this._readyToCapture(); return true;
   }
 
   _readyToCapture() {
