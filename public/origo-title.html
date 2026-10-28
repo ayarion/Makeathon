@@ -9,8 +9,8 @@ html, body { margin:0; height:100%; overflow:hidden; background:#FCEEDC }
 body { background:linear-gradient(180deg, #FCEEDC, #F7CF8A 16%, #F2A877 36%, #EC9C8B 54%, #E5825F 74%, #D8805B) }
 #origo-root { position:fixed; inset:0; overflow:hidden }
 /* ===== ここから: アニメーション本体のCSS (base.css) ===== */
-#stage { --ground:#F2A877; --main:#FFFFFF; --second:#C9714F; --accent:#F7CF8A; color:var(--main); font-family:var(--sans, system-ui, sans-serif); --warm-cream:#FCEEDC; --warm-coral:#E5825F; --warm-rose:#EC9C8B; --warm-blush:#F5C6B5 }
-.ground { position:absolute; inset:0; background:linear-gradient(180deg, var(--warm-cream), var(--accent) 16%, var(--ground) 36%, var(--warm-rose) 54%, var(--warm-coral) 74%, color-mix(in srgb, var(--warm-coral) 60%, var(--second))) }
+#origo-root, #stage { --ground:#F2A877; --main:#FFFFFF; --second:#C9714F; --accent:#F7CF8A; color:var(--main); font-family:var(--sans, system-ui, sans-serif); --warm-cream:#FCEEDC; --warm-coral:#E5825F; --warm-rose:#EC9C8B; --warm-blush:#F5C6B5 }
+.ground { position:absolute; inset:0; background:transparent }
 .words { position:absolute; margin:0; display:flex; flex-direction:column; gap:24px } .words > * { margin:0 }
 .line { font-family:var(--sans, system-ui, sans-serif); font-size:190px; line-height:1; font-weight:900 } .sub { font-size:36px }
 .world { position:absolute; inset:0; transform-origin:540px 880px }
@@ -172,10 +172,16 @@ kit.scene('crane', {
       '<canvas class="art crane-grain" width="1080" height="1920"></canvas><div class="world crane-world">' +
       '<div class="title-row"><h1 class="line title-name crane-name" lang="ja">折りGO</h1><span class="title-mark crane-mark"></span></div>' +
       '<svg class="art" viewBox="0 0 1080 1920"><g class="crane-papers"></g><g>' + bird + '</g></svg></div></div>'));
-    this.sky = st.querySelector('.crane-sky').style;
+    // Keep the sky and paper texture viewport-sized while the logo keeps its aspect ratio.
+    const root = document.getElementById('origo-root');
+    const sky = st.querySelector('.crane-sky');
+    const grain = st.querySelector('.crane-grain');
+    root.insertBefore(sky, st);
+    root.insertBefore(grain, st);
+    this.sky = sky.style;
     this.ok = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('background-image', 'radial-gradient(in oklab 50% 50% at 50% 50%, red, transparent)');
     this.sky.background = skyBg(0, false);
-    const g2 = st.querySelector('.crane-grain').getContext('2d');
+    const g2 = grain.getContext('2d');
     g2.fillStyle = g2.createPattern(paperTexture(), 'repeat'); g2.fillRect(0, 0, 1080, 1920);
     this.world = st.querySelector('.crane-world').style;
     const nameEl = st.querySelector('.crane-name'), txt = nameEl.textContent;
