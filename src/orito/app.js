@@ -137,14 +137,14 @@ async function finishCapture(){
  function saveResult(wasSaved){
   if(wasSaved){
    renderAll();closeDialog();const last=candidate.captures.at(-1);
-   openDialog(capturedSession.multiple?'みんな、捕まえた！':'捕まえた！',`<img class="dialog-animal" src="${portrait(last.animal,last.color)}" alt="${ANIMAL_NAMES[last.animal]}"><p class="captured-title">アラームが止まったよ</p>`,[{label:last.animal==='crane'?'ツルを開く':'折り紙をひらく',icon:'paper',kind:'primary',run:()=>showCapture(last,true)},{label:'どうぶつの森へ',kind:'primary',icon:'book',run:()=>{closeDialog();go('collection');}}]);
+   openDialog(capturedSession.multiple?'みんな、捕まえた！':'捕まえた！',`<img class="dialog-animal" src="${portrait(last.animal,last.color)}" alt="${ANIMAL_NAMES[last.animal]}"><p class="captured-title">アラームが止まったよ</p>`,[{label:last.animal==='crane'?'ツルを開く':'折り紙をひらく',icon:'paper',kind:'primary',run:()=>showCapture(last,true)}]);
   }else{openDialog('捕まえた記録を保存しよう',`<p>保存できなかったよ。もう一度ためしてね。</p>`,[{label:'もう一度保存',kind:'primary',run:()=>saveResult(commit(candidate))}]);}
  }
  saveResult(saved);
 }
 function showCapture(c,fresh=false){
- if(fresh){closeDialog();showPaperOpening(c,{onDone:()=>go('write'),onCollection:()=>go('collection')});return;}
- openDialog(`${ANIMAL_NAMES[c.animal]}からの、1枚`, `<img class="dialog-animal" src="${portrait(c.animal,c.color)}" alt=""><div class="unfolded-task">${escape(c.text)}</div>`,[{label:'やることを見る',icon:'check',kind:'primary',run:()=>{closeDialog();go('write');$('#tasks-title').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});}},{label:'どうぶつの森へ',kind:'primary',icon:'book',run:()=>{closeDialog();go('collection');}}]);
+ if(fresh){closeDialog();showPaperOpening(c,{onDone:()=>go('write')});return;}
+ openDialog(`${ANIMAL_NAMES[c.animal]}からの、1枚`, `<img class="dialog-animal" src="${portrait(c.animal,c.color)}" alt=""><div class="unfolded-task">${escape(c.text)}</div>`,[{label:'やることを見る',icon:'check',kind:'primary',run:()=>{closeDialog();go('write');$('#tasks-title').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});}}]);
 }
 function startOnboarding({fromTitle=false}={}){
  if(storageProblem)return;
