@@ -206,6 +206,5 @@ html:has(.experience-dialog[open]),body:has(.experience-dialog[open]){background
 .experience-dialog[open] #experience-mount,.experience-dialog[open] .morning-stage{height:100%;min-height:0;border-radius:0}
 .story-dialog[open] .opening-top,.story-dialog[open] .intro-top{padding-top:max(18px,env(safe-area-inset-top))}
 .story-dialog[open] .opening-bottom,.story-dialog[open] .intro-actions{padding-bottom:max(24px,env(safe-area-inset-bottom))!important}
-.marker-instruction{font-size:16px;line-height:1.6;text-align:center;margin:0;max-width:24em}
-.marker-print{font-size:16px!important;padding:10px 16px;border:1px solid #806454;border-radius:12px;background:#fffaf4;color:#493c35}
+.floor-instruction{font-size:16px;line-height:1.6;text-align:center;margin:0;max-width:24em}
 @media(max-width:700px){.story-dialog[open],.experience-dialog[open]{max-width:none;box-shadow:none}.story-dialog[open] .opening-stage{min-height:210px}.story-dialog[open] .opening-story{min-height:100%}}
