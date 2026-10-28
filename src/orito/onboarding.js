@@ -1,3 +1,4 @@
+import { openMarkerPrint } from './ar-engine.js';
 import { upgradeImage, mountAnimal } from './origami3d.ts';
 import { SHEET_PHASE } from '../origami/engine.ts';
 
@@ -9,13 +10,43 @@ const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const safe = text => { const element = document.createElement('span'); element.textContent = text; return element.innerHTML; };
 const arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M2 12h20M8 6l4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4M18 8l4 4-4 4"/></svg>';
 let cleanUp = () => {};
+const surfaceHistory=new WeakMap();
+export function openFullPage(surface) {
+  const modals=[...document.querySelectorAll('dialog:modal')].filter(other=>other!==surface);
+  surfaceHistory.set(surface,{focus:document.activeElement,modals});
+  document.querySelectorAll('dialog[open]').forEach(other => { if(other !== surface) other.close(); });
+  surface.show();
+  surface.setAttribute('aria-modal','true');
+  document.querySelector('.app-shell')?.setAttribute('inert','');
+  surface.querySelector('button:not([disabled])')?.focus({preventScroll:true});
+}
+export function closeFullPage(surface) {
+  if(!surface.open)return;
+  surface.close();
+  document.querySelector('.app-shell')?.removeAttribute('inert');
+  const previous=surfaceHistory.get(surface);surfaceHistory.delete(surface);
+  previous?.modals.forEach(modal=>{if(modal.isConnected&&!modal.open)modal.showModal();});
+  if(previous?.focus?.isConnected)previous.focus.focus({preventScroll:true});
+}
+// Non-modal dialogs need an explicit Escape and keyboard focus boundary.
+document.addEventListener('keydown', event => {
+  const surface=document.querySelector('.story-dialog[open],.experience-dialog[open]');
+  if(!surface)return;
+  if(event.key==='Escape'){event.preventDefault();surface.dispatchEvent(new Event('cancel',{cancelable:true}));}
+  if(event.key==='Tab'){
+    const items=[...surface.querySelectorAll('button:not([disabled]),a[href],[tabindex="0"]')].filter(el=>el.getClientRects().length);
+    const first=items[0],last=items.at(-1);
+    if(event.shiftKey && (document.activeElement===first || !surface.contains(document.activeElement))){event.preventDefault();last?.focus();}
+    else if(!event.shiftKey && (document.activeElement===last || !surface.contains(document.activeElement))){event.preventDefault();first?.focus();}
+  }
+});
 function mount(content, label) {
   cleanUp();
   dialog.innerHTML = content;
   dialog.setAttribute('aria-label', label);
-  if (!dialog.open) dialog.showModal();
+  if (!dialog.open) openFullPage(dialog);
 }
-export function closeStory() { cleanUp(); cleanUp = () => {}; dialog.classList.remove('from-title'); dialog.close(); }
+export function closeStory() { cleanUp(); cleanUp = () => {}; dialog.classList.remove('from-title'); if(dialog.open) closeFullPage(dialog); }
 const KATAKANA = { crane: 'ツル', rabbit: 'ウサギ', fox: 'キツネ' };
 
 export function showPcNotice() {
@@ -41,11 +72,12 @@ export function showOnboarding({ onStart, onInteract, onExit, isNative, color, a
     <div class="story-scene" aria-hidden="true"><img class="intro-landscape" src="assets/landscape-morning.svg" alt=""><div class="alarm-orbit orbit-one"></div><div class="alarm-orbit orbit-two"></div><div class="intro-crane"><img src="assets/animal-crane.svg" alt=""></div><span class="paper-spark spark-one">✧</span><span class="paper-spark spark-two">✧</span></div>
     <header class="intro-top"><span class="intro-brand">折りGO</span><button type="button" class="story-close" aria-label="体験をやめる">×</button></header>
     <div class="intro-copy"><div class="alarm-stamp"><span class="alarm-dot"></span>緊急！</div><h1>${name}が現れました</h1><p>つかまえてアラームを止めよう</p></div>
-    <footer class="intro-actions"><button type="button" class="intro-primary">つかまえる <span aria-hidden="true">→</span></button>${isNative ? '' : '<span class="intro-mode">ブラウザで体験</span>'}</footer>
+    <footer class="intro-actions">${!isNative?'<p class="marker-instruction">印刷したマーカーを、2mほど先の床に置いてね。</p><button type="button" class="marker-print">印刷用マーカーを開く</button>':''}<button type="button" class="intro-primary">つかまえる <span aria-hidden="true">→</span></button>${isNative ? '' : '<span class="intro-mode">ブラウザで体験</span>'}</footer>
   </section>`, `緊急！${name}が現れました。つかまえてアラームを止めよう`);
   dialog.classList.toggle('from-title', fromTitle);
   // The crane that is about to run away, flapping in place.
   upgradeImage(dialog.querySelector('.intro-crane'), { kind: animal, paper: color, loop: 'run', heading: -.35, zoom: 1.12 });
+  dialog.querySelector('.marker-print')?.addEventListener('click',()=>{if(!openMarkerPrint())dialog.querySelector('.marker-instruction').textContent='ポップアップを許可して、もう一度押してね。';});
   const start = dialog.querySelector('.intro-primary');
   const interact = () => onInteract?.();
   dialog.addEventListener('pointerdown', interact);

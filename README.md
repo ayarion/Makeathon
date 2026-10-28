@@ -16,6 +16,8 @@ http://127.0.0.1:5173/ を開きます。
 3. アラーム画面の「実際のアラーム画面を体験する」を押します。
 4. PCではスマホ用QRを表示します。スマホではアラーム体験へ進み、「つかまえる」からカメラを使用します。
 
+Safariでは「印刷用マーカーを開く」からA4で印刷した紙を床に固定します。約2m離れて位置を決め、鶴のいる場所まで近づいて鶴をタップしてください。時間経過だけでは捕獲できません。方式と制約は [docs/safari-marker.md](docs/safari-marker.md) にあります。
+
 カメラなしの体験ボタンはありません。カメラを使えない場合は許可・接続を確認して再試行します。タスクと捕獲の記録はブラウザ内に保存します。
 
 チュートリアルの再表示は `/?tutorial=1#write`、スマホの体験入口は `/?experience=1#alarm` です。スマホのカメラにはHTTPSで配信されたページが必要です。
@@ -29,6 +31,7 @@ QRのリンク先は https://manual-trend-29876845.figma.site/?experience=1#alar
 ```sh
 pnpm build
 pnpm exec tsc --noEmit
+node --test tests/marker-proximity.test.mjs
 ```
 
 Figmaのプレビューではチュートリアル、鶴の作成・保存、PCのQR表示、スマホ幅のホーム表示を確認しています。スマホ実機のカメラ・歩行判定は未検証です。iOSアプリ化の要件は [docs/ios-requirements.md](docs/ios-requirements.md) にあります。

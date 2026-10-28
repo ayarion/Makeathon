@@ -494,6 +494,21 @@ export class OrigamiXR {
     });
   }
 
+  /** Only a ray through an animal mesh may finish the XR catch. */
+  hitAnimal(x: number, y: number) {
+    const ray = new THREE.Raycaster();
+    const camera = this.renderer.xr.isPresenting ? this.renderer.xr.getCamera() : this.camera;
+    ray.setFromCamera(new THREE.Vector2(x, y), camera);
+    return this.actors.some(actor => actor.holder.visible && ray.intersectObject(actor.animal.group, true).length > 0);
+  }
+
+  hitRay(position: DOMPointReadOnly, orientation: DOMPointReadOnly) {
+    const origin = new THREE.Vector3(position.x, position.y, position.z);
+    const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w));
+    const ray = new THREE.Raycaster(origin, direction);
+    return this.actors.some(actor => actor.holder.visible && ray.intersectObject(actor.animal.group, true).length > 0);
+  }
+
   render(dt: number) {
     const step = this.reduced ? 0 : dt;
     this.actors.forEach((actor) => actor.animal.update(step));

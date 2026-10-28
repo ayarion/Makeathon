@@ -1,6 +1,6 @@
 import { initialState, loadState, saveState, createTask, addCapture, nextAlarm, ANIMAL_NAMES } from './store.js';
 import { MorningExperience } from './ar-engine.js';
-import { showOnboarding, closeStory, showPaperOpening, showPcNotice } from './onboarding.js';
+import { showOnboarding, closeStory, openFullPage, closeFullPage, showPaperOpening, showPcNotice } from './onboarding.js';
 import { portrait, playNightFold } from './origami3d.ts';
 import { startGuidedTutorial } from './tutorial.js';
 const $ = s => document.querySelector(s);
@@ -113,16 +113,16 @@ async function launch(mode,{onboarding=false}={}) {
  const multiple=!onboarding&&tasks.length>1&&(selected==='multiple'||(selected==='random'&&!state.lastMultiple&&Math.random()<.23));
  const participants=multiple?tasks.slice(0,3):tasks.slice(0,1);
  session={ids:participants.map(t=>t.id),multiple,animal:onboarding?'crane':tasks[0].animal,animals:onboarding?['crane']:participants.map(t=>t.animal),colors:participants.map(t=>t.color),onboarding,sample:!!participants[0].sample};
- const dlg=$('#experience-dialog');if(!dlg.open)dlg.showModal();
+ const dlg=$('#experience-dialog');if(!dlg.open)openFullPage(dlg);
  if(mode==='native'){
   nativeActive=true;$('#experience-mount').innerHTML=`<div class="native-wait"><h2>鶴を迎えにいこう</h2><p>カメラを準備しているよ</p></div>`;
   window.webkit.messageHandlers.origamiAR.postMessage({action:'start',multiple,count:session.ids.length,animals:session.animals,animal:session.animal,volume:Math.max(.35,state.alarm.volume),muted:false});return;
  }
  experience=new MorningExperience({mount:$('#experience-mount'),onState:s=>{if(s.ended)interruptExperience();},onCapture:()=>finishCapture(),onError:e=>{console.warn('Experience:',e);}});
- try{await experience.start({chaseSeconds:onboarding?8:30,mode,multiple,count:session.ids.length,animals:session.animals,colors:session.colors,animal:session.animal,volume:Math.max(.35,state.alarm.volume),muted:false,audioContext:alarmAudio});const exit=document.createElement('button');exit.className='experience-exit';exit.textContent='体験をやめる';exit.onclick=()=>endExperience();$('#experience-mount').append(exit);}
+ try{await experience.start({mode,multiple,count:session.ids.length,animals:session.animals,colors:session.colors,animal:session.animal,volume:Math.max(.35,state.alarm.volume),muted:false,audioContext:alarmAudio});const exit=document.createElement('button');exit.className='experience-exit';exit.textContent='体験をやめる';exit.onclick=()=>endExperience();$('#experience-mount').append(exit);}
  catch(e){await endExperience();if(mode==='camera'&&isDesktop()){showPcNotice();return;}openDialog('カメラを開けなかったよ',`<p>${escape(e.message||'カメラの接続を確認して、もう一度ためしてね。')}</p>`,[{label:'もう一度ためす',kind:'primary',run:()=>launch(mode,{onboarding})}]);}
 }
-async function endExperience(){session=null;if(nativeActive){nativeActive=false;window.webkit.messageHandlers.origamiAR.postMessage({action:'stop'});}if(experience){const old=experience;experience=null;await old.stop();}$('#experience-dialog').close();$('#experience-mount').innerHTML='';stopRinging();}
+async function endExperience(){session=null;if(nativeActive){nativeActive=false;window.webkit.messageHandlers.origamiAR.postMessage({action:'stop'});}if(experience){const old=experience;experience=null;await old.stop();}closeFullPage($('#experience-dialog'));$('#experience-mount').innerHTML='';stopRinging();}
 function interruptExperience(){return experience?.phase==='capturing'?finishCapture():endExperience();}
 $('#experience-dialog').addEventListener('cancel',event=>{event.preventDefault();void endExperience();});
 window.addEventListener('origami-ar',async e=>{const d=e.detail||{};if(!nativeActive)return;if(d.type==='capture')finishCapture();else if(d.type==='closed'){nativeActive=false;endExperience();}else if(d.type==='error'){const onboarding=!!session?.onboarding;nativeActive=false;await endExperience();openDialog('カメラをもう一度',`<p>${escape(d.message||'設定からカメラを許可してね')}</p>`,[{label:'もう一度ためす',kind:'primary',run:()=>launch('native',{onboarding})},{label:'もどる',run:closeDialog}]);}});
