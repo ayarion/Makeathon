@@ -24,6 +24,7 @@ export function startGuidedTutorial() {
     note: ['#open-note', '01 / 04', 'ここを押して、明日の手紙を書こう。'],
     write: ['#task-text', '01 / 04', '明日やることを、ひとつ入力してね。'],
     fold: ['#save-task', '02 / 04', '書けたら、このボタンで折り紙にしよう。'],
+    folding: ['.paper-sheet', '02 / 04', '折り紙ができるまで、見ていてね。'],
     alarmLink: ['.nav-item[data-page="alarm"]', '03 / 04', '次は、ここからアラームを設定しよう。'],
     alarm: ['.alarm-time-row', '03 / 04', '起きる時刻を選んで、スイッチをオンにしよう。'],
     demo: ['#start-morning', '04 / 04', '最後に、実際のアラームを体験してみよう。途中でやめても大丈夫。'],
@@ -64,7 +65,7 @@ export function startGuidedTutorial() {
     stage = next;
     clearHighlight();
     const [selector, count, copy] = steps[stage];
-    target = $(selector);
+    target = stage === 'folding' ? $('.origami-fold') || $(selector) : $(selector);
     const surface = editor.open ? editor : alarm.open ? alarm : document.body;
     if (spotlight.matches(':popover-open')) spotlight.hidePopover();
     surface.append(spotlight);
@@ -94,9 +95,11 @@ export function startGuidedTutorial() {
   window.addEventListener('origo:note-open', () => show(text.value.trim() ? 'fold' : 'write'), { signal });
   window.addEventListener('origo:note-close', () => show('note'), { signal });
   text.addEventListener('input', () => {
+    if (stage === 'folding') return;
     const next = text.value.trim() ? 'fold' : 'write';
     if (next !== stage) show(next);
   }, { signal });
+  window.addEventListener('origo:task-folding', () => show('folding'), { signal });
   window.addEventListener('origo:task-folded', () => show('alarmLink'), { signal });
   window.addEventListener('origo:route', event => {
     if (event.detail === 'alarm') show('alarm');
