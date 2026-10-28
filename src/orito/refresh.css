@@ -183,13 +183,13 @@ button:active{translate:0 1px}
 .pc-notice .pc-card h1{font-size:26px;margin:12px 0}
 .pc-notice .pc-card p{font-size:16px;line-height:1.6}
 
-/* Extend the warm home background beyond browser chrome and safe-area edges. */
-html{min-height:100%;background:#faead8;overscroll-behavior-y:none}
-body{min-height:100vh;min-height:100dvh;isolation:isolate}
+/* Paint the document canvas itself, including long pages and safe-area edges. */
+html:root{
+  min-height:100%;overscroll-behavior-y:none;background-color:#f1c2a9;
+  background-image:radial-gradient(ellipse 70% 48% at 74% 75%,#fff3bdc9 0%,#ffd4a361 45%,transparent 75%),radial-gradient(ellipse 90% 65% at 12% 100%,#eaa08b70 0%,transparent 72%),linear-gradient(180deg,#fff5e6 0%,#fcebd7 33%,#f9dcc4 65%,#f1c2a9 100%);
+  background-size:100% 100%;background-repeat:no-repeat;
+}
+body{min-height:100vh;min-height:100dvh;background:transparent;isolation:isolate}
 #root{min-height:100vh;min-height:100dvh}
 body[data-page="write"],body[data-page="alarm"],body[data-page="collection"]{background:transparent}
-body[data-page="write"]::after,body[data-page="alarm"]::after,body[data-page="collection"]::after{
-  content:"";position:fixed;inset:-80px 0 auto;height:calc(100vh + 160px);height:calc(100lvh + 160px);z-index:-1;pointer-events:none;
-  background:radial-gradient(ellipse 70% 48% at 74% 75%,#fff3bdc9 0%,#ffd4a361 45%,transparent 75%),radial-gradient(ellipse 90% 65% at 12% 100%,#eaa08b70 0%,transparent 72%),linear-gradient(180deg,#fff5e6 0%,#fcebd7 33%,#f9dcc4 65%,#f1c2a9 100%);
-}
 body[data-page="write"] .nav-item[data-page="write"]{display:none}
