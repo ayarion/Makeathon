@@ -34,7 +34,7 @@ function animalSVG(animal) {
 const STYLES = `
 .morning-stage{position:relative;width:100%;height:100%;min-height:520px;overflow:hidden;isolation:isolate;background:#d8e1d3;color:#173c54;font-family:inherit;border-radius:24px}
 .morning-stage *{box-sizing:border-box}.morning-stage button{font:inherit;font-size:18px;font-weight:700;min-height:48px;border:0;border-radius:16px;padding:12px 18px;cursor:pointer;touch-action:manipulation}.morning-stage button:focus-visible{outline:4px solid #d1a85d;outline-offset:4px}.morning-stage button:disabled{cursor:default;opacity:.65}.morning-stage button:active:not(:disabled){transform:translateY(2px)}
-.morning-stage__camera,.morning-stage__gl,.morning-stage__landscape{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.morning-stage__landscape{background:radial-gradient(ellipse at 68% 27%,#fff2c9 0 11%,transparent 11.4%),linear-gradient(#d6e4df 0 57%,#aec5ab 57% 61%,#789c83 61% 72%,#496f63 72%)}
+.morning-stage__camera,.morning-stage__gl,.morning-stage__landscape{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.morning-stage__landscape{background:radial-gradient(ellipse at 68% 27%,#fff2c9 0 11%,transparent 11.4%),linear-gradient(#d6e4df 0 32%,#aec5ab 32% 36%,#789c83 36% 52%,#496f63 52%)}
 .morning-stage__landscape:before,.morning-stage__landscape:after{content:'';position:absolute;width:150%;height:38%;left:-20%;bottom:-9%;border-radius:50%;background:#386258;box-shadow:0 -6px 9px #193e4420;transform:rotate(8deg)}.morning-stage__landscape:after{bottom:13%;left:28%;height:22%;background:#88aa90;transform:rotate(-14deg)}
 .morning-stage__grain{position:absolute;inset:0;pointer-events:none;opacity:.15;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23fff' filter='url(%23n)' opacity='.65' d='M0 0h200v200H0z'/%3E%3C/svg%3E")}
 .morning-stage__top{position:absolute;z-index:4;left:16px;right:16px;top:max(16px,env(safe-area-inset-top));display:flex;align-items:start;justify-content:space-between;gap:10px}.morning-stage__badge{font-size:18px;line-height:1.35;font-weight:800;letter-spacing:.03em;color:#173c54;background:#fff9ecee;border:1px solid #e3d6bf;padding:10px 12px;border-radius:13px;box-shadow:0 3px 0 #203d421a}.morning-stage__top button{background:#fff9eced;color:#173c54;padding:10px 14px;white-space:nowrap}
@@ -107,7 +107,7 @@ export class MorningExperience {
     }
     const stage = document.createElement('section');
     stage.className = 'morning-stage'; stage.setAttribute('aria-label', '朝の追いかけっこ');
-    stage.innerHTML = `<div class="morning-stage__landscape" ${this.mode === 'demo' ? '' : 'hidden'}></div><video class="morning-stage__camera" autoplay muted playsinline ${this.mode === 'camera' ? '' : 'hidden'}></video><canvas class="morning-stage__gl" ${this.mode === 'ar' ? '' : 'hidden'} aria-hidden="true"></canvas><div class="morning-stage__grain" ${this.mode === 'demo' ? '' : 'hidden'}></div><div class="morning-stage__creatures" ${this.mode === 'ar' ? 'hidden' : ''}></div><div class="morning-stage__feedback" hidden aria-hidden="true"></div><div class="morning-stage__top"><span class="morning-stage__badge">${this.mode === 'ar' ? 'AR' : this.mode === 'camera' ? 'カメラ DEMO' : 'DEMO'}</span></div><div class="morning-stage__bottom"><p class="morning-stage__status" role="status" aria-live="polite"></p><div class="morning-stage__progress" aria-hidden="true"><i></i></div><div class="morning-stage__actions"><button type="button" class="morning-stage__primary" data-action="primary" disabled>ここから始める</button><button type="button" class="morning-stage__secondary" data-action="reset">やり直す</button></div></div>`;
+    stage.innerHTML = `<div class="morning-stage__landscape" ${this.mode === 'demo' ? '' : 'hidden'}></div><video class="morning-stage__camera" autoplay muted playsinline ${this.mode === 'camera' ? '' : 'hidden'}></video><canvas class="morning-stage__gl" ${this.mode === 'ar' ? '' : 'hidden'} aria-hidden="true"></canvas><div class="morning-stage__grain" ${this.mode === 'demo' ? '' : 'hidden'}></div><div class="morning-stage__creatures" ${this.mode === 'ar' ? 'hidden' : ''}></div><div class="morning-stage__feedback" hidden aria-hidden="true"></div><div class="morning-stage__top"><span class="morning-stage__badge">${this.mode === 'ar' ? 'AR' : this.mode === 'camera' ? 'カメラ DEMO' : 'DEMO'}</span></div><div class="morning-stage__bottom"><p class="morning-stage__status" role="status" aria-live="polite"></p><div class="morning-stage__progress" aria-hidden="true"><i></i></div><div class="morning-stage__actions"><button type="button" class="morning-stage__primary" data-action="primary" disabled>ここで決定</button></div></div>`;
     this.mount.replaceChildren(stage); this.stage = stage;
     this.video = stage.querySelector('video'); this.canvas = stage.querySelector('canvas');
     this.status = stage.querySelector('[role=status]'); this.primary = stage.querySelector('[data-action=primary]'); this.progress = stage.querySelector('.morning-stage__progress i'); this.muteButton = stage.querySelector('[data-action=mute]'); this.feedback = stage.querySelector('.morning-stage__feedback');
@@ -122,7 +122,6 @@ export class MorningExperience {
       if (view) element.classList.add('has-origami'); else element.innerHTML = animalSVG(kind);
       this.views.push(view);
     });
-    stage.querySelector('[data-action=reset]').onclick = () => this.reset();
     this.primary.onclick = () => {
       if (this.paused) { void this._resume(); return; }
       if (this.phase === 'capture-ready') { this.capture(); return; }
@@ -188,9 +187,9 @@ export class MorningExperience {
 
   _prepareDemoPlacement() {
     this.demoFrom = [0, -.03]; this.demoTarget = [0, -.03]; this.elapsed = 0; this.lastFrame = 0;
-    this.primary.hidden = false; this.primary.disabled = false; this.primary.textContent = 'ここから始める（デモ）';
+    this.primary.hidden = false; this.primary.disabled = false; this.primary.textContent = 'ここで決定';
     this.progress.style.width = '0%';
-    this._state('placing', '床の位置を決めよう（デモ）');
+    this._state('placing', '床を写してください');
   }
 
   _placementSuccess() {
@@ -214,7 +213,7 @@ export class MorningExperience {
     if (this.feedback) this.feedback.hidden = true;
     this.elapsed = 0; this.dwell = 0; this.moves = 0; this.lastFrame = 0; this.nextTurn = LIMITS.turnSeconds; this.lastEscape = -Infinity; this.demoFrom = [0, 0]; this.demoTarget = [0, 0]; this.demoStep = -1;
     this.primary.disabled = true; this.primary.hidden = this.mode === 'ar'; this.primary.textContent = '追いかけっこ中';
-    this._state('chasing', this.mode === 'ar' ? 'ゆっくり追いかけよう' : 'どこへ行くのかな？');
+    this._state('chasing', '逃げた！追いかけよう');
     this._startAlarm();
   }
 
@@ -232,38 +231,34 @@ export class MorningExperience {
         // Screen-space movement is only a demo: it never implies that a
         // camera frame or the user's body has been tracked.
         this.demoFrom = this.demoTarget; this.demoStep = segment; this.moves++;
-        // Pick a spot at a new depth and side: higher on screen = farther away = smaller.
-        let next;
-        for (let tries = 0; tries < 8; tries++) {
-          next = [(Math.random() * 2 - 1) * .34, -.22 + Math.random() * .38];
-          if (Math.hypot((next[0] - this.demoFrom[0]) * 1.4, next[1] - this.demoFrom[1]) > .26) break;
-        }
-        this.demoTarget = next;
+        // Alternate lateral feints while depth only increases: the animal flees away.
+        const side = segment % 2 === 0 ? 1 : -1;
+        this.demoTarget = [side * (.65 + Math.random() * .5), 0];
         if (segment % 3 === 2) this._emote('escape');
       }
       if (this.elapsed >= this.chaseSeconds) this._surrender();
     }
-    const resting = ['surrendered', 'capture-ready', 'capturing'].includes(this.phase);
-    const progress = resting ? 1 : Math.min(1, (this.elapsed % LIMITS.demoTurnSeconds) / 1.1);
+    const running = this.phase === 'chasing';
+    const progress = Math.min(1, (this.elapsed % LIMITS.demoTurnSeconds) / LIMITS.demoTurnSeconds);
     const ease = progress * progress * (3 - 2 * progress);
     const width = this.stage.clientWidth, height = this.stage.clientHeight;
-    const target = resting ? [0, -.03] : this.demoTarget;
-    const from = resting ? [0, -.03] : this.demoFrom;
-    const x = (from[0] + (target[0] - from[0]) * ease) * width;
-    const y = (from[1] + (target[1] - from[1]) * ease) * height;
-    const running = this.phase === 'chasing';
-    const depthOf = value => clamp(.55 + (value + .22) / .38 * .7, .55, 1.25);
-    const dx = target[0] - from[0], dy = target[1] - from[1];
-    const heading = running ? Math.atan2(dx * 1.4, dy * 1.6) * .9 : .25;
+    // A virtual ground plane: perspective shrinks both the animal and lateral motion.
+    // This is animation only; camera mode does not measure the user's real position.
+    const depth = 2.2 + 3.8 * (1 - Math.exp(-this.elapsed / 10));
+    const perspective = 2.2 / depth;
+    const from = this.demoFrom || [0, 0], target = this.demoTarget || [0, 0];
+    const worldX = from[0] + (target[0] - from[0]) * ease;
+    const x = worldX / depth * width * .72;
+    const y = -.25 * (1 - perspective) * height;
+    const heading = running ? Math.PI - Math.sign(target[0] - from[0]) * .55 : Math.PI;
     this.creatures.forEach((element, index) => {
       const view = this.views[index];
-      // The origami run cycles carry their own hop; the CSS bounce is for the SVG fallback only.
       if (view) { view.play(running ? 'run' : 'idle'); view.setHeading(heading); }
-      const offset = index ? (index === 1 ? -1 : 1) * Math.min(width * .17, 90) : 0;
-      const edge = Math.max(0, width / 2 - (element.clientWidth || 155) / 2 - 16);
-      const jump = view || this._reduced || this.phase !== 'chasing' ? 0 : Math.abs(Math.sin(this.elapsed * 6 + index)) * 18;
-      const tilt = view || this._reduced || this.phase !== 'chasing' ? 0 : Math.sin(this.elapsed * 5 + index) * 7;
-      element.style.transform = `translate(calc(-50% + ${clamp(x + offset, -edge, edge)}px),calc(-50% + ${y + (index ? 22 : 0) - jump}px)) rotate(${tilt}deg) scale(${(resting ? 1 : depthOf(y / height)).toFixed(3)})`;
+      const offset = index ? (index === 1 ? -1 : 1) * Math.min(width * .2, 90) * perspective : 0;
+      const edge = Math.max(0, width / 2 - (element.clientWidth || 155) * perspective / 2 - 16);
+      const jump = view || this._reduced || !running ? 0 : Math.abs(Math.sin(this.elapsed * 9 + index)) * 14 * perspective;
+      const tilt = view || this._reduced || !running ? 0 : Math.sin(this.elapsed * 7 + index) * 5;
+      element.style.transform = `translate(calc(-50% + ${clamp(x + offset, -edge, edge)}px),calc(-50% + ${y + (index ? 16 * perspective : 0) - jump}px)) rotate(${tilt}deg) scale(${perspective.toFixed(3)})`;
     });
     this.progress.style.width = `${Math.min(this.elapsed / this.chaseSeconds, 1) * 100}%`;
   }
@@ -352,7 +347,7 @@ export class MorningExperience {
       // Reset is a user gesture and must leave a paused XR session usable.
       // Otherwise the placement button remains disabled behind paused=true.
       this.paused = false; this.audio?.resume().catch(() => {});
-      this.primary.hidden = false; this.primary.disabled = true; this.primary.textContent = 'ここから始める'; this.progress.style.width = '0%';
+      this.primary.hidden = false; this.primary.disabled = true; this.primary.textContent = 'ここで決定'; this.progress.style.width = '0%';
       this._state('placing', '3m四方を空けて、2m先の床を映そう');
     } else if (this.paused) { this.savedPhase = 'placing'; void this._resume(); }
     else { this.audio?.resume().catch(() => {}); this._prepareDemoPlacement(); }
@@ -386,7 +381,7 @@ export class MorningExperience {
       if (phase === 'surrendered') { this._surrender(); this._startAlarm(); }
       else if (phase === 'placed') { this._state('placed', '準備できた！'); this._placementSuccess(); }
       else if (phase === 'placing') { if (this.mode === 'ar') this.reset(); else this._prepareDemoPlacement(); }
-      else { this.primary.hidden = this.mode === 'ar'; this.primary.disabled = true; this.primary.textContent = '追いかけっこ中'; this._state('chasing', this.mode === 'ar' ? 'ゆっくり追いかけよう' : 'どこへ行くのかな？'); }
+      else { this.primary.hidden = this.mode === 'ar'; this.primary.disabled = true; this.primary.textContent = '追いかけっこ中'; this._state('chasing', '逃げた！追いかけよう'); }
     } catch (cause) {
       if (token !== this.token) return;
       this._releaseCamera(); this.audio?.suspend().catch(() => {});
@@ -504,7 +499,7 @@ export class MorningExperience {
     this.target = this._randomTarget(); this._placementSuccess();
   }
 
-  _randomTarget(awayFromViewer = false) {
+  _randomTarget(awayFromViewer = true) {
     // Every endpoint and its connecting segment stays within the circle the
     // user cleared during placement. This does not infer obstacle-free rooms.
     const rotation = Math.random() * Math.PI * 2;

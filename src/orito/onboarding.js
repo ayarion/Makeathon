@@ -61,13 +61,13 @@ export function showOnboarding({ onStart, onInteract, onExit, isNative, color, a
   cleanUp = () => { dialog.removeEventListener('cancel', cancel); dialog.removeEventListener('pointerdown', interact); dialog.removeEventListener('keydown', interact); };
 }
 
-export function showPaperOpening(capture, { onDone, onCollection }) {
+export function showPaperOpening(capture, { onDone }) {
   let step = 0, queued = 0, locked = false, pointer = null, timer = null, live = true;
   mount(`<section class="opening-story" data-step="0">
     <header class="opening-top"><span class="intro-brand">折りGO</span><button type="button" class="story-close" aria-label="開封を閉じる">×</button></header>
     <div class="opening-heading"><span class="chapter">朝の、お届けもの</span><h1>ひと折りずつ、ひらこう。</h1></div>
     <div class="opening-stage"><button type="button" class="unfold-surface" aria-label="好きな方向にスワイプして開く。1回目"><span class="unfold-shadow"></span><img class="folded-crane" draggable="false" style="pointer-events:none;-webkit-user-drag:none" src="assets/animal-${capture.animal}.svg" alt="折り紙"><span class="unfold-paper" aria-hidden="true"><span class="paper-center"></span><span class="paper-wing wing-left"></span><span class="paper-wing wing-right"></span><span class="paper-wing wing-top"></span><span class="paper-wing wing-bottom"></span><span class="paper-crease crease-one"></span><span class="paper-crease crease-two"></span></span></button><article class="revealed-note" hidden><span class="note-label">${capture.sample ? 'おためしのタスク' : '昨晩のタスク'}</span><p>${safe(capture.text)}</p><span class="note-crane" aria-hidden="true">✧</span></article></div>
-    <footer class="opening-bottom"><div class="swipe-instruction">${arrow}<p>好きな方向にスワイプ</p></div><div class="fold-progress" role="status" aria-live="polite" aria-label="3回のうち0回ひらいた"><i></i><i></i><i></i></div><button type="button" class="unfold-fallback">ボタンでひと折りひらく</button><div class="opening-complete" hidden><button type="button" class="intro-primary opening-done">今日をはじめる <span aria-hidden="true">→</span></button><button type="button" class="intro-mute opening-collection">どうぶつの森へ</button></div></footer>
+    <footer class="opening-bottom"><div class="swipe-instruction">${arrow}<p>好きな方向にスワイプ</p></div><div class="fold-progress" role="status" aria-live="polite" aria-label="3回のうち0回ひらいた"><i></i><i></i><i></i></div><button type="button" class="unfold-fallback">ボタンでひと折りひらく</button><div class="opening-complete" hidden><button type="button" class="intro-primary opening-done">今日をはじめる <span aria-hidden="true">→</span></button></div></footer>
   </section>`, '折り紙を3回のスワイプでひらく');
   const root = dialog.querySelector('.opening-story');
   const surface = dialog.querySelector('.unfold-surface');
@@ -145,7 +145,6 @@ export function showPaperOpening(capture, { onDone, onCollection }) {
   dialog.querySelector('.unfold-fallback').onclick = advance;
   const done = () => { closeStory(); onDone(); };
   dialog.querySelector('.opening-done').onclick = done;
-  dialog.querySelector('.opening-collection').onclick = () => { closeStory(); onCollection(); };
   dialog.querySelector('.story-close').onclick = done;
   const cancel = event => { event.preventDefault(); done(); };
   dialog.addEventListener('cancel', cancel);
