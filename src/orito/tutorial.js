@@ -24,7 +24,7 @@ export function startGuidedTutorial() {
     note: ['#open-note', '01 / 04', 'ここを押して、明日の手紙を書こう。'],
     write: ['#task-text', '01 / 04', '明日やることを、ひとつ入力してね。'],
     fold: ['#save-task', '02 / 04', '書けたら、このボタンで折り紙にしよう。'],
-    folding: ['.paper-sheet', '02 / 04', '折り紙ができるまで、見ていてね。'],
+    folding: ['.paper-sheet', '02 / 04', 'この動物と朝鬼ごっこするよ！'],
     alarmLink: ['.nav-item[data-page="alarm"]', '03 / 04', '次は、ここからアラームを設定しよう。'],
     alarm: ['.alarm-time-row', '03 / 04', '起きる時刻を選んで、スイッチをオンにしよう。'],
     demo: ['#start-morning', '04 / 04', '最後に、実際のアラームを体験してみよう。途中でやめても大丈夫。'],
