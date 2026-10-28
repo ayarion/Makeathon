@@ -1,4 +1,3 @@
-import { loadWorldEngine } from './ar-engine.js';
 import { upgradeImage, mountAnimal } from './origami3d.ts';
 import { SHEET_PHASE } from '../origami/engine.ts';
 
@@ -72,12 +71,11 @@ export function showOnboarding({ onStart, onInteract, onExit, isNative, color, a
     <div class="story-scene" aria-hidden="true"><img class="intro-landscape" src="assets/landscape-morning.svg" alt=""><div class="alarm-orbit orbit-one"></div><div class="alarm-orbit orbit-two"></div><div class="intro-crane"><img src="assets/animal-crane.svg" alt=""></div><span class="paper-spark spark-one">✧</span><span class="paper-spark spark-two">✧</span></div>
     <header class="intro-top"><span class="intro-brand">折りGO</span><button type="button" class="story-close" aria-label="体験をやめる">×</button></header>
     <div class="intro-copy"><div class="alarm-stamp"><span class="alarm-dot"></span>緊急！</div><h1>${name}が現れました</h1><p>つかまえてアラームを止めよう</p></div>
-    <footer class="intro-actions"><p class="floor-instruction">床を写して、逃げた動物を追いかけよう。</p><button type="button" class="intro-primary">つかまえる <span aria-hidden="true">→</span></button>${isNative ? '' : '<span class="intro-mode">ブラウザで体験</span>'}</footer>
+    <footer class="intro-actions"><p class="floor-instruction">床を写して、鶴との鬼ごっこを始めよう。</p><button type="button" class="intro-primary">つかまえる <span aria-hidden="true">→</span></button>${isNative ? '' : '<span class="intro-mode">ブラウザで体験</span>'}</footer>
   </section>`, `緊急！${name}が現れました。つかまえてアラームを止めよう`);
   dialog.classList.toggle('from-title', fromTitle);
   // The crane that is about to run away, flapping in place.
   upgradeImage(dialog.querySelector('.intro-crane'), { kind: animal, paper: color, loop: 'run', heading: -.35, zoom: 1.12 });
-  if(!isNative)void loadWorldEngine().catch(()=>{});
   const start = dialog.querySelector('.intro-primary');
   const interact = () => onInteract?.();
   dialog.addEventListener('pointerdown', interact);
@@ -85,12 +83,6 @@ export function showOnboarding({ onStart, onInteract, onExit, isNative, color, a
   start.onclick = async () => {
     start.disabled = true;
     try {
-      // iOS sensor permission must be requested directly from this tap.
-      if(!isNative){
-        const requests=[window.DeviceMotionEvent,window.DeviceOrientationEvent].filter(api=>typeof api?.requestPermission==='function').map(api=>api.requestPermission());
-        const permissions=await Promise.all(requests);
-        if(permissions.some(value=>value!=='granted'))throw new Error('設定で「動作と方向」を許可して、もう一度押してね。');
-      }
       await onStart();
     } catch(cause) { const hint=dialog.querySelector('.floor-instruction');if(hint)hint.textContent=cause.message||'もう一度ためしてね。'; } finally { if (start.isConnected) start.disabled = false; }
   };
